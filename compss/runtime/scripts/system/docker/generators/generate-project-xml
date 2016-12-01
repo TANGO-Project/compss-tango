@@ -1,0 +1,28 @@
+#!/bin/bash
+
+GENERATORS_DIR=$(dirname "$0")
+. $GENERATORS_DIR/aux-functions
+
+if [ -z $1 ]; then
+    ERROR "Indicate the number of nodes as first parameter."
+    exit 1
+fi
+
+NUM_WORKERS=$1
+
+echo -e "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?> \n"
+echo -e "<Project> \n"
+echo -e "<MasterNode/> \n"
+
+for i in $(seq 1 $NUM_WORKERS)
+do
+    echo -e "\
+        <ComputeNode Name=\"worker$i\"> \n\
+            <InstallDir>/opt/COMPSs/</InstallDir> \n\
+            <WorkingDir>/tmp/worker$i/</WorkingDir> \n\
+        </ComputeNode> \n\
+       "
+done
+     
+echo "</Project>"
+

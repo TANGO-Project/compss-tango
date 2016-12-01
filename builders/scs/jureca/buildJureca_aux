@@ -1,0 +1,44 @@
+#!/bin/bash
+ 
+  #############################################################
+  # Name: buildJureca_aux
+  # Description: SCRIPT FOR LOCAL COMPSs BUILD in Jureca
+  # Parameters: <targetDir> Base Target Installation folder
+  #
+  # ATTENTION: DO NOT EXECUTE THIS FILE. IT IS AUTOMATICALLY 
+  #            EXECUTED FROM buildJureca script
+  #############################################################
+
+  usage() {
+    echo "Incorrect number of parameters"
+    echo " Usage: buildJureca_aux <FullTargetPath>"
+    echo " "
+    exit 1
+  }
+
+
+  ####################
+  # MAIN
+  ####################
+  # Get parameters
+  if [ $# -ne 1 ]; then
+    usage
+  fi
+
+  # SET SCRIPT VARIABLES 
+  targetDir=$1
+  scriptDir=$(dirname $0)
+
+  modules="GCCcore/.5.4.0 Intel/2017.0.098-GCC-5.4.0 Python/2.7.12 Java IntelMPI Boost PAPI/5.5.0 Autotools/20150215"
+  additionalExports=""
+  queues_cfg="jureca.cfg"
+  extrae_with_openmpi="false"
+  openmpi_version=""
+  extrae_with_impi="false"
+  impi_version=""
+
+  ${scriptDir}/buildSC_aux ${targetDir} "${modules}" "${additionalExports}" "${queues_cfg}" "${extrae_with_openmpi}" "${openmpi_version}" "${extrae_with_impi}" "${impi_version}"
+
+  # END
+  exit 0
+
