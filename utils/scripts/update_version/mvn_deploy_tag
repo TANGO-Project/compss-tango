@@ -1,0 +1,49 @@
+#!/bin/bash -e
+
+usage() {
+  exitValue=$1
+
+  echo " "
+  echo "Usage ./mvn_deploy_tag <version>"
+  echo " "
+
+  exit $exitValue
+}
+ 
+  #=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+  #=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+  # Check parameters
+  if [ $# -ne 1 ]; then
+    echo "ERROR: Incorrect number of parameters"
+    usage 1
+  fi
+
+  # Get version parameters
+  version=$1
+  echo "Deploying COMPSs Tag ${version} to MVN..."
+
+  # Define script variables
+  script_dir=$(pwd)/$(dirname $0)
+  base_dir=${script_dir}/../../../../tags/${version}/
+
+  #---------------------------------------------------------------------
+  # Deploy
+  echo "- Compiling and installing"
+  cd ${base_dir}
+  mvn -U clean install
+  cd ${script_dir}
+
+  echo "- Deploying mvn"
+  cd ${base_dir}
+  mvn -U deploy
+  cd ${script_dir}
+
+  #---------------------------------------------------------------------
+  # NOTIFY SUCCESS
+  echo " "
+  echo "FINISHED! COMPSs Tag ${version} deployed to Maven"
+  echo " "
+
+  # END
+  exit 0
+

@@ -1,0 +1,43 @@
+#!/bin/bash
+
+  #--------------------------------------------------------------------------------
+  # Get script parameters
+  COMPSsExec=$1
+  comm=$2
+  baseDir=$3
+  COMPSsLogFolder=$4
+
+  # Set script variables
+  appsBaseDir=${baseDir}/apps_basic
+  logsBaseDir=${baseDir}/logs
+
+  exitValue=0
+  results=""
+
+  #--------------------------------------------------------------------------------
+  # Source common execution script
+  scriptDir=$(pwd)/$(dirname $0)  
+  source ${scriptDir}/execute_commons
+
+  #--------------------------------------------------------------------------------
+  echo " "
+  echo "**Testing Development Apps"
+  echo " "
+
+  appFolders=$(ls ${baseDir})
+  for app in ${appFolders}; do
+    if [ "$app" != "logs" ]; then
+      appBaseDir=${baseDir}/${app}
+      appLogDir=${logsBaseDir}/${app}
+
+      execute_application ${COMPSsExec} ${comm} ${COMPSsLogFolder} ${appBaseDir} ${appLogDir} 
+    fi
+  done
+
+  # Show Result table
+  print_result "DEVELOPMENT" $results
+
+  #--------------------------------------------------------------------------------
+  #EXIT
+  exit $exitValue
+

@@ -1,0 +1,41 @@
+#!/bin/bash
+
+  #--------------------------------------------------------------------------------
+  # Get script parameters
+  COMPSsExec=$1
+  comm=$2
+  baseDir=$3
+  COMPSsLogFolder=$4
+
+  # Set script variables
+  appsBaseDir=${baseDir}/apps_basic
+  logsBaseDir=${baseDir}/logs
+
+  exitValue=0
+  results=""
+
+  #--------------------------------------------------------------------------------
+  # Source common execution script
+  scriptDir=$(pwd)/$(dirname $0)  
+  source ${scriptDir}/execute_commons
+
+  #--------------------------------------------------------------------------------
+  echo " "
+  echo "**Testing Basic Block Apps"
+  echo " "
+
+  appFolders=$(ls ${appsBaseDir})
+  for app in ${appFolders}; do
+    appBaseDir=${appsBaseDir}/${app}
+    appLogDir=${logsBaseDir}/${app}
+
+    execute_application ${COMPSsExec} ${comm} ${COMPSsLogFolder} ${appBaseDir} ${appLogDir} 
+  done
+
+  # Show Result table
+  print_result "BASIC" $results
+
+  #--------------------------------------------------------------------------------
+  #EXIT
+  exit $exitValue
+
