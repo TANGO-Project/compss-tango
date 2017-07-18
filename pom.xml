@@ -95,7 +95,7 @@
 	<!-- SUB-MODULES -->
 	<modules>
 		<module>compss</module>
-		<module>tests/sources</module>
+		<!--module>tests/sources</module-->
 		<module>performance_analysis/auto-cbm</module>
 		<module>maven-plugins/instrumentation</module>
 	</modules>
