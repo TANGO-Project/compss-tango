@@ -1,21 +1,22 @@
 #
-#  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
 #
-#  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+#  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
-"""
-@author: fconejer
+# 
 
+
+
+"""
 PyCOMPSs API - Implement (Versioning)
 =====================================
     This file contains the class constraint, needed for the implement
@@ -95,9 +96,10 @@ class implement(object):
             ce_signature = anotherClass + '.' + anotherMethod
             coreElement.set_ce_signature(ce_signature)
 
-            # This is not needed since the arguments are already set by the task decorator.
-            #implArgs = [anotherClass, anotherMethod]
-            #coreElement.set_implTypeArgs(implArgs)
+            # This is not needed since the arguments are already set by the
+            # task decorator.
+            # implArgs = [anotherClass, anotherMethod]
+            # coreElement.set_implTypeArgs(implArgs)
 
             coreElement.set_implType("METHOD")
             func.__to_register__ = coreElement
@@ -108,7 +110,6 @@ class implement(object):
         else:
             # worker code
             pass
-
 
         @wraps(func)
         def implement_f(*args, **kwargs):

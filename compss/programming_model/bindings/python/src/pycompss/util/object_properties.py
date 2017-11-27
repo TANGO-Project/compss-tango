@@ -1,21 +1,22 @@
 #
-#  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
 #
-#  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+#  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
-"""
-@author: srodrig1
+# 
 
+
+
+"""
 PyCOMPSs Utils: Object properties.
 
 Offers some functions that check properties about objects.
@@ -28,6 +29,7 @@ import ctypes
 import inspect
 import collections
 
+
 def is_module_available(module_name):
     """
     Checks if a module is available in the current Python installation.
@@ -39,6 +41,7 @@ def is_module_available(module_name):
         return True
     except:
         return False
+
 
 def is_basic_iterable(obj):
     """
@@ -82,13 +85,14 @@ def get_object_hierarchy(obj):
     while object_stack:
         current_object = object_stack.pop()
         current_object_id = id(current_object)
-        if not current_object_id in vis:
+        if current_object_id not in vis:
             vis.add(current_object_id)
             yield current_object
             if hasattr(current_object, '__dict__'):
                 map(object_stack.append, current_object.__dict__.values())
             elif is_basic_iterable(current_object):
                 map(object_stack.append, iter(current_object))
+
 
 def has_subobjects_of_module(obj, module_name):
     """
@@ -109,12 +113,13 @@ def has_subobjects_of_module(obj, module_name):
             return True
     return False
 
+
 def has_numpy_objects(obj):
     """
     Checks if the given object is a numpy object or
     some of its subojects are.
     @param obj: An object
-    @return: Boolean -> True if obj is a numpy objects (or some of 
+    @return: Boolean -> True if obj is a numpy objects (or some of
     its subobjects). False otherwise
     """
     return has_subobjects_of_module(obj, 'numpy')

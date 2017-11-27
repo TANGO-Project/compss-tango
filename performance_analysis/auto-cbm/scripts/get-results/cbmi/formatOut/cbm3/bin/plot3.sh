@@ -1,1 +1,0 @@
-./plot_I3_vs_IO3.sh

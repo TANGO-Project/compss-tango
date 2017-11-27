@@ -1,21 +1,22 @@
 #
-#  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
 #
-#  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+#  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
-"""
-@author: fconejer
+# 
 
+
+
+"""
 PyCOMPSs Utils - JVM Configuration Parser
 =========================================
     This file contains all methods required to parse the jvm options file.
@@ -23,6 +24,7 @@ PyCOMPSs Utils - JVM Configuration Parser
 
 # import logging
 # logger = logging.getLogger(__name__)
+
 
 def convert_to_dict(jvm_opt_file):
     """ JVM parameter file converter to dictionary.
@@ -37,16 +39,16 @@ def convert_to_dict(jvm_opt_file):
             if line:
                 if (line.startswith("-XX:")):
                     # These parameters have no value
-                    key = line.split(":")[1].replace('\n','')
+                    key = line.split(":")[1].replace('\n', '')
                     opts[key] = True
                 elif (line.startswith("-D")):
                     key = line.split("=")[0]
-                    value = line.split("=")[1].replace('\n','')
+                    value = line.split("=")[1].replace('\n', '')
                     value = value.strip()
                     if not value:
                         value = None
                     opts[key] = value
                 else:
-                    key = line.replace('\n','')
+                    key = line.replace('\n', '')
                     opts[key] = True
     return opts

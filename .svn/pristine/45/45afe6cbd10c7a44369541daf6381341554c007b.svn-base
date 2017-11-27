@@ -1,0 +1,7 @@
+
+optimization.parameter=ENERGY
+time.boundary=20000
+power.boundary=500
+price.boundary=20
+energy.boundary=500000
+monetary.boundary=2000

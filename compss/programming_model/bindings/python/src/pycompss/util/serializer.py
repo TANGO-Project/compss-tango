@@ -1,21 +1,22 @@
 #
-#  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
 #
-#  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+#  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
-"""
-@author: srodrig1
+# 
 
+
+
+"""
 PyCOMPSs Utils: Data serializer/deserializer
 This file implements the main serialization/deserialization functions.
 All serialization/deserialization calls should be made using one of the following functions:
@@ -35,7 +36,7 @@ import types
 import traceback
 import cStringIO as StringIO
 import cPickle as pickle
-from serialization.extendedSupport import copy_generator, pickle_generator, GeneratorSnapshot
+from serialization.extendedSupport import pickle_generator, convert_to_generator
 from object_properties import object_belongs_to_module
 
 try:
@@ -48,8 +49,10 @@ try:
 except:
     import cPickle as numpy
 
+
 class SerializerException(Exception):
     pass
+
 
 def get_serializer_priority(obj=[]):
     """
@@ -61,6 +64,7 @@ def get_serializer_priority(obj=[]):
         return [numpy, pickle, dill]
     return [pickle, dill]
 
+
 def get_serializers():
     """
     Returns a list with the available serializers in the most common order
@@ -69,11 +73,13 @@ def get_serializers():
     """
     return get_serializer_priority()
 
+
 def serialize_to_handler(obj, handler):
     """
     Serialize an object to a handler.
     @param obj: Object to be serialized.
-    @param file_handler: A handler object. It must implement methods like write, writeline and similar stuff
+    @param file_handler: A handler object. It must implement methods like
+                         write, writeline and similar stuff
     """
     # get the serializer priority
     serializer_priority = get_serializer_priority(obj)
@@ -91,7 +97,8 @@ def serialize_to_handler(obj, handler):
                 pickle_generator(obj, handler, serializer)
                 success = True
             except:
-                pass
+                import traceback
+                traceback.print_exc()
         # general case
         else:
             try:
@@ -101,15 +108,15 @@ def serialize_to_handler(obj, handler):
                 else:
                     serializer.dump(obj, handler, protocol=serializer.HIGHEST_PROTOCOL)
                     success = True
-                #serializer.dump(obj, handler, protocol=serializer.HIGHEST_PROTOCOL)
-                #success = True
             except:
-                pass
+                import traceback
+                traceback.print_exc()
         i += 1
 
     # if ret_value is None then all the serializers have failed
     if not success:
-        raise SerializerException('Cannot serialize object %s'%obj)
+        raise SerializerException('Cannot serialize object %s' % obj)
+
 
 def serialize_to_file(obj, file_name):
     """
@@ -121,6 +128,7 @@ def serialize_to_file(obj, file_name):
     serialize_to_handler(obj, handler)
     handler.close()
     return file_name
+
 
 def serialize_to_string(obj):
     """
@@ -152,14 +160,16 @@ def deserialize_from_handler(handler):
         try:
             ret = serializer.load(handler)
             # special case: deserialized obj wraps a generator
-            if isinstance(ret, GeneratorSnapshot):
-                ret = copy_generator(ret)[0]
+            if isinstance(ret, tuple) and ret and ret[0] == 'Th3N3xtEl3m3ntIsAG3n3r4t0r':
+                ret = convert_to_generator(ret[1])
             return ret
         except:
-            pass
+            import traceback
+            traceback.print_exc()
     # we are not able to deserialize the contents from file_name with any of our
     # serializers
     raise SerializerException('Cannot deserialize object')
+
 
 def deserialize_from_file(file_name):
     """
@@ -171,6 +181,7 @@ def deserialize_from_file(file_name):
     ret = deserialize_from_handler(handler)
     handler.close()
     return ret
+
 
 def deserialize_from_string(serialized_content):
     """

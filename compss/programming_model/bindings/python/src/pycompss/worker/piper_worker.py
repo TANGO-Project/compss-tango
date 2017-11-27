@@ -1,23 +1,22 @@
 #
-#  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
 #
-#  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+#  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
-"""
-@author: fconejer
-@author: cramonco
-@author: srodrig1
+# 
 
+
+
+"""
 PyCOMPSs Persistent Worker
 ===========================
     This file contains the worker code.
@@ -28,13 +27,18 @@ import os
 import signal
 import sys
 import traceback
-import thread_affinity
 from exceptions import ValueError
-from multiprocessing import Process, Queue, Pipe
+from multiprocessing import Process
+from multiprocessing import Queue
 import thread_affinity
+import base64
 
-from pycompss.api.parameter import Type, JAVA_MAX_INT, JAVA_MIN_INT
-from pycompss.util.serializer import serialize_to_file, deserialize_from_file, deserialize_from_string, SerializerException
+from pycompss.api.parameter import TYPE
+from pycompss.api.parameter import JAVA_MIN_INT, JAVA_MAX_INT
+from pycompss.util.serializer import serialize_to_file
+from pycompss.util.serializer import deserialize_from_file
+from pycompss.util.serializer import deserialize_from_string
+from pycompss.util.serializer import SerializerException
 from pycompss.util.logs import init_logging_worker
 
 SYNC_EVENTS = 8000666
@@ -56,9 +60,8 @@ tracing = False
 debug = True
 processes = []
 
-#if sys.version_info >= (2, 7):
-#    import importlib
-
+# if sys.version_info >= (2, 7):
+#     import importlib
 
 
 #####################
@@ -68,6 +71,7 @@ INIT = "init"  # -- worker.py debug tracing #thr pipes_CMD pipes_RESULT
 EXECUTE_TASK_TAG = "task"  # -- "task" taskId jobOut jobErr task_params
 END_TASK_TAG = "endTask"  # -- "endTask" taskId endStatus
 QUIT_TAG = "quit"  # -- "quit"
+
 
 ######################
 #  Processes body
@@ -92,6 +96,13 @@ def worker(queue, process_name, input_pipe, output_pipe, storage_conf):
     level = logger.getEffectiveLevel()
     formatter = logging.Formatter(handler.formatter._fmt)
 
+    if storage_conf != 'null':
+        try:
+            from storage.api import initWorkerPostFork as initStorageAtWorkerPostFork
+            initStorageAtWorkerPostFork()
+        except:
+            logger.info("[PYTHON WORKER] Could not find initWorkerPostFork storage call. Ignoring it.")
+
     # TRACING
     # if tracing:
     #     pyextrae.eventandcounters(TASK_EVENTS, 0)
@@ -102,81 +113,121 @@ def worker(queue, process_name, input_pipe, output_pipe, storage_conf):
 
     logger.debug("[PYTHON WORKER] Starting process " + str(process_name))
     while alive:
-        with open(input_pipe, 'r', 0) as in_pipe:
-            for line in in_pipe:
-                def process_task(line):
-                    if line != "":
-                        line = line.split()
-                        if line[0] == EXECUTE_TASK_TAG:
-                            # CPU binding
-                            binded_cpus = line[-1]
+        in_pipe = open(input_pipe, 'r', 0)
+        def process_task(line, pipe):
+            line = line.split()
+            pipe.close()
+            if line[0] == EXECUTE_TASK_TAG:
+                # CPU binding
+                binded_cpus = line[-1]
 
-                            def bind_cpus(binded_cpus):
-                                if binded_cpus != "-":
-                                    binded_cpus = map(int, binded_cpus.split(","))
-                                    thread_affinity.setaffinity(binded_cpus)
+                def bind_cpus(binded_cpus):
+                    if binded_cpus != "-":
+                        binded_cpus = map(int, binded_cpus.split(","))
+                        thread_affinity.setaffinity(binded_cpus)
 
-                            bind_cpus(binded_cpus)
+                bind_cpus(binded_cpus)
 
-                            line = line[0:-1]
-                            # task jobId command
-                            job_id = line[1]
-                            job_out = line[2]
-                            job_err = line[3]
-                            # line[4] = <boolean> = ?
-                            # line[5] = <integer> = ?
-                            # line[6] = <boolean> = ?
-                            # line[7] = null      = ?
-                            # line[8] = <string>  = operation type (e.g. METHOD)
+                line = line[0:-1]
+                # task jobId command
+                job_id = line[1]
+                job_out = line[2]
+                job_err = line[3]
+                # line[4] = <boolean> = tracing
+                # line[5] = <integer> = task id
+                # line[6] = <boolean> = debug
+                # line[7] = <string>  = storage conf.
+                # line[8] = <string>  = operation type (e.g. METHOD)
+                # line[9] = <string>  = module
+                # line[10]= <string>  = method
+                # line[11]= <integer> = Number of slaves (worker nodes) == #nodes
+                # <<list of slave nodes>>
+                # line[11 + #nodes] = <integer> = computing units
+                # line[12 + #nodes] = <boolean> = has target
+                # line[13 + #nodes] = <string>  = has return (always 'null')
+                # line[14 + #nodes] = <integer> = Number of parameters
+                # <<list of parameters>>
+                #       !---> type, stream, prefix , value
 
-                            # Swap logger from stream handler to file handler.
-                            logger.removeHandler(logger.handlers[0])
-                            out_file_handler = logging.FileHandler(job_out)
-                            out_file_handler.setLevel(level)
-                            out_file_handler.setFormatter(formatter)
-                            logger.addHandler(out_file_handler)
-                            err_file_handler = logging.FileHandler(job_err)
-                            err_file_handler.setLevel(logging.ERROR)
-                            err_file_handler.setFormatter(formatter)
-                            logger.addHandler(err_file_handler)
+                logger.debug("[PYTHON WORKER %s] Received task." % str(process_name))
+                logger.debug("[PYTHON WORKER %s] - TASK CMD: %s" % (str(process_name), str(line)))
 
-                            logger.debug("[PYTHON WORKER %s] Received task." % str(process_name))
-                            logger.debug("[PYTHON WORKER %s] - TASK CMD: %s" % (str(process_name), str(line)))
-                            try:
-                                out = open(job_out, 'w')
-                                err = open(job_err, 'w')
-                                sys.stdout = out
-                                sys.stderr = err
-                                exitvalue = execute_task(process_name, storage_conf, line[9:])
-                                sys.stdout = stdout
-                                sys.stderr = stderr
-                                sys.stdout.flush()
-                                sys.stderr.flush()
-                                out.close()
-                                err.close()
+                # Swap logger from stream handler to file handler.   #### TODO: FIX LOGGER!
+                logger.removeHandler(logger.handlers[0])
+                out_file_handler = logging.FileHandler(job_out)
+                out_file_handler.setLevel(level)
+                out_file_handler.setFormatter(formatter)
+                logger.addHandler(out_file_handler)
+                err_file_handler = logging.FileHandler(job_err)
+                err_file_handler.setLevel(logging.ERROR)
+                err_file_handler.setFormatter(formatter)
+                logger.addHandler(err_file_handler)
 
-                                # endTask jobId exitValue
-                                message = END_TASK_TAG + " " + str(job_id) + " " + str(exitvalue) + "\n"
-                                logger.debug("[PYTHON WORKER %s] - Pipe %s END TASK MESSAGE: %s" %(str(process_name),
-                                                                                                   str(output_pipe),
-                                                                                                   str(message)))
-                                with open(output_pipe, 'w+') as out_pipe:
-                                    out_pipe.write(message)
-                            except Exception, e:
-                                logger.exception("[PYTHON WORKER %s] Exception %s" %(str(process_name), str(e)))
-                                queue.put("EXCEPTION")
+                logger.debug("[PYTHON WORKER %s] Received task." % str(process_name))
+                logger.debug("[PYTHON WORKER %s] - TASK CMD: %s" % (str(process_name), str(line)))
+                try:
+                    out = open(job_out, 'w')
+                    err = open(job_err, 'w')
+                    sys.stdout = out
+                    sys.stderr = err
+                    exitvalue, newTypes, newValues = execute_task(process_name, storage_conf, line[9:])
+                    sys.stdout = stdout
+                    sys.stderr = stderr
+                    sys.stdout.flush()
+                    sys.stderr.flush()
+                    out.close()
+                    err.close()
 
-                            # Restore logger
-                            logger.removeHandler(out_file_handler)
-                            logger.removeHandler(err_file_handler)
-                            logger.addHandler(handler)
+                    if exitvalue == 0:
+                        # Task has finished without exceptions
+                        # endTask jobId exitValue message
+                        params = buildReturnParamsMessage(line[9:], newTypes, newValues)
+                        message = END_TASK_TAG + " " + str(job_id) \
+                                               + " " + str(exitvalue) \
+                                               + " " + str(params) + "\n"
+                    else:
+                        # An exception has been raised in task
+                        message = END_TASK_TAG + " " + str(job_id) \
+                                  + " " + str(exitvalue) + "\n"
 
-                        elif line[0] == QUIT_TAG:
-                            # Received quit message -> Suicide
-                            logger.debug("[PYTHON WORKER %s] Received quit." % str(process_name))
-                            return False
-                    return True
-                alive = process_task(line)
+                    logger.debug("[PYTHON WORKER %s] - Pipe %s END TASK MESSAGE: %s" % (str(process_name),
+                                                                                        str(output_pipe),
+                                                                                        str(message)))
+                    # The return message is:
+                    #
+                    # TaskResult ==> jobId exitValue List<Object>
+                    #
+                    # Where List<Object> has D length:
+                    # D = #parameters + (hasTarget ? 1 : 0) + (hasReturn ? 1 : 0)
+                    # And contains:
+                    # - Null if it NOT a PSCO
+                    # - PSCOId (String) if is a PSCO
+                    #
+                    # This is sent through the pipe with the endTask message.
+                    # If the task had an object or file as parameter and the worker returns the id,
+                    # the runtime can change the type (and locations) to a EXTERNAL_OBJ_T.
+
+                    with open(output_pipe, 'w+') as out_pipe:
+                        out_pipe.write(message)
+                except Exception, e:
+                    logger.exception("[PYTHON WORKER %s] Exception %s" % (str(process_name), str(e)))
+                    queue.put("EXCEPTION")
+
+                # Restore logger
+                logger.removeHandler(out_file_handler)
+                logger.removeHandler(err_file_handler)
+                logger.addHandler(handler)
+
+            elif line[0] == QUIT_TAG:
+                # Received quit message -> Suicide
+                logger.debug("[PYTHON WORKER %s] Received quit." % str(process_name))
+                return False
+            return True
+
+        for line in in_pipe:
+            if line != "":
+                alive = process_task(line, in_pipe)
+                break
 
     # TRACING
     # if tracing:
@@ -184,6 +235,36 @@ def worker(queue, process_name, input_pipe, output_pipe, storage_conf):
     sys.stdout.flush()
     sys.stderr.flush()
     print("[PYTHON WORKER] Exiting process ", process_name)
+
+
+def buildReturnParamsMessage(params, types, values):
+    assert len(types) == len(values), 'Inconsistent state: return type-value length mismatch for return message.'
+
+    # Analize the input parameters to get has_target and has_return
+    # More information that requested can be gathered and returned in the return message if necessary.
+    numSlaves = int(params[2])
+    argPosition = 3 + numSlaves
+    args = params[argPosition + 1:]
+    has_target = args[0]
+    if has_target == 'false':
+        hasTarget = False
+    else:
+        hasTarget = True
+    return_type = args[1]
+    if return_type == 'null':
+        hasReturn = False
+    else:
+        hasReturn = True
+
+    pairs = zip(types, values)
+    num_params = len(pairs)
+    params = ''
+    for p in pairs:
+        params = params + str(p[0]) + ' ' + str(p[1]) + ' '
+    totalParams = num_params + (1 if hasTarget else 0) + (1 if hasReturn else 0)
+    message = str(totalParams) + ' ' + params
+    return message
+
 
 #####################################
 # Execute Task Method - Task handler
@@ -204,7 +285,7 @@ def execute_task(process_name, storage_conf, params):
 
     # COMPSs keywords for tasks (ie: tracing, process name...)
     compss_kwargs = {
-        'compss_tracing' : tracing,
+        'compss_tracing': tracing,
         'compss_process_name': process_name,
         'compss_storage_conf': storage_conf
     }
@@ -240,99 +321,17 @@ def execute_task(process_name, storage_conf, params):
         logger.debug("[PYTHON WORKER %s] Num Params: %s" % (str(process_name), str(num_params)))
         logger.debug("[PYTHON WORKER %s] Args: %r" % (str(process_name), args))
 
-    pos = 0
-
-    values = []
-    types = []
-    streams = []
-    prefixes = []
-
-    #if tracing:
-    #    pyextrae.event(TASK_EVENTS, 0)
-    #    pyextrae.event(TASK_EVENTS, PARAMETER_PROCESSING)
+    # if tracing:
+    #     pyextrae.event(TASK_EVENTS, 0)
+    #     pyextrae.event(TASK_EVENTS, PARAMETER_PROCESSING)
 
     # Get all parameter values
     logger.debug("[PYTHON WORKER %s] Processing parameters:" % process_name)
-    for i in range(0, num_params):
-        pType = int(args[pos])
-        pStream = int(args[pos + 1])
-        pPrefix = args[pos + 2]
-        pValue = args[pos + 3]
+    values, types, streams, prefixes = get_input_params(num_params, logger, args, process_name, persistent_storage)
 
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("[PYTHON WORKER %s] Parameter : %s" % (process_name, str(i)))
-            logger.debug("[PYTHON WORKER %s] \t * Type : %s" % (process_name, str(pType)))
-            logger.debug("[PYTHON WORKER %s] \t * Stream : %s" % (process_name, str(pStream)))
-            logger.debug("[PYTHON WORKER %s] \t * Prefix : %s" % (process_name, str(pPrefix)))
-            logger.debug("[PYTHON WORKER %s] \t * Value: %r" % (process_name, pValue))
-
-        types.append(pType)
-        streams.append(pStream)
-        prefixes.append(pPrefix)
-
-        if pType == Type.FILE:
-            ## check if it is a persistent object --- TO REMOVE THESE LINES
-            #if 'getID' in dir(pValue) and pValue.getID() is not None:
-            #    po = getByID(pValue.getID())
-            #    values.append(po)
-            #else:
-            #    values.append(pValue)
-            values.append(pValue)
-        elif pType == Type.EXTERNAL_PSCO:
-            po = getByID(pValue)
-            values.append(po)
-            pos += 1  # Skip info about direction (R, W)
-        elif pType == Type.STRING:
-            num_substrings = int(pValue)
-            aux = ''
-            first_substring = True
-            for j in range(4, num_substrings + 4):
-                if not first_substring:
-                    aux += ' '
-                first_substring = False
-                aux += args[pos + j]
-            #######
-            # Check if the string is really an object
-            # Required in order to recover objects passed as parameters.
-            # - Option object_conversion
-            real_value = aux
-            try:
-                # try to recover the real object
-                aux = deserialize_from_string(aux)
-            except (SerializerException, ValueError, EOFError):
-                # was not an object
-                aux = real_value
-            #######
-            values.append(aux)
-            logger.debug("[PYTHON WORKER %s] \t * Final Value: %s" % (process_name, str(aux)))
-            pos += num_substrings
-        elif pType == Type.INT:
-            values.append(int(pValue))
-        elif pType == Type.LONG:
-            l = long(pValue)
-            if l > JAVA_MAX_INT or l < JAVA_MIN_INT:
-                # A Python int was converted to a Java long to prevent overflow
-                # We are sure we will not overflow Python int, otherwise this
-                # would have been passed as a serialized object.
-                l = int(l)
-            values.append(l)
-        elif pType == Type.DOUBLE:
-            values.append(float(pValue))
-        elif pType == Type.BOOLEAN:
-            if pValue == 'true':
-                values.append(True)
-            else:
-                values.append(False)
-        # elif (pType == Type.OBJECT):
-        #    pass
-        else:
-            logger.fatal("[PYTHON WORKER %s] Invalid type (%d) for parameter %d" % (process_name, pType, i))
-            exit(1)
-        pos += 4
-
-    #if tracing:
-    #    pyextrae.event(TASK_EVENTS, 0)
-    #    pyextrae.event(TASK_EVENTS, LOGGING)
+    # if tracing:
+    #     pyextrae.event(TASK_EVENTS, 0)
+    #     pyextrae.event(TASK_EVENTS, LOGGING)
 
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug("[PYTHON WORKER %s] RUN TASK with arguments: " % process_name)
@@ -347,11 +346,14 @@ def execute_task(process_name, storage_conf, params):
         for t in types:
             logger.debug("[PYTHON WORKER %s] \t\t %s" % (process_name, str(t)))
 
-    #if tracing:
-    #    pyextrae.event(TASK_EVENTS, 0)
-    #    pyextrae.event(TASK_EVENTS, MODULES_IMPORT)
+    # if tracing:
+    #     pyextrae.event(TASK_EVENTS, 0)
+    #     pyextrae.event(TASK_EVENTS, MODULES_IMPORT)
 
     import_error = False
+
+    newTypes = []
+    newValues = []
 
     try:
         # Try to import the module (for functions)
@@ -365,21 +367,13 @@ def execute_task(process_name, storage_conf, params):
             logger.debug("[PYTHON WORKER %s] Module successfully loaded (Python version < 2.7" % process_name)
 
         def task_execution_1():
-            # if tracing:
-            #    pyextrae.eventandcounters(TASK_EVENTS, 0)
-            #    pyextrae.eventandcounters(TASK_EVENTS, TASK_EXECUTION)
-            logger.debug("[PYTHON WORKER %s] Starting task execution" % process_name)
-            getattr(module, method_name)(*values, compss_types=types, **compss_kwargs)
-            logger.debug("[PYTHON WORKER %s] Finished task execution" % process_name)
-            # if tracing:
-            #    pyextrae.eventandcounters(TASK_EVENTS, 0)
-            #    pyextrae.eventandcounters(TASK_EVENTS, WORKER_END)
+            return task_execution(logger, process_name, module, method_name, types, values, compss_kwargs)
 
         if persistent_storage:
             with TaskContext(logger, values, config_file_path=storage_conf):
-                task_execution_1()
+                newTypes, newValues = task_execution_1()
         else:
-            task_execution_1()
+            newTypes, newValues = task_execution_1()
 
     # ==========================================================================
     except AttributeError:
@@ -389,7 +383,9 @@ def execute_task(process_name, storage_conf, params):
         logger.exception("[PYTHON WORKER %s] WORKER EXCEPTION - Attribute Error Exception" % process_name)
         logger.exception(''.join(line for line in lines))
         logger.exception("[PYTHON WORKER %s] Check that all parameters have been defined with an absolute import path (even if in the same file)" % process_name)
-        exit(1)
+        # If exception is raised during the task execution, newTypes and
+        # newValues are empty
+        return 1, newTypes, newValues
     # ==========================================================================
     except ImportError:
         import_error = True
@@ -399,7 +395,9 @@ def execute_task(process_name, storage_conf, params):
         lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
         logger.exception("[PYTHON WORKER %s] WORKER EXCEPTION" % process_name)
         logger.exception(''.join(line for line in lines))
-        return 1
+        # If exception is raised during the task execution, newTypes and
+        # newValues are empty
+        return 1, newTypes, newValues
 
     if import_error:
         logger.debug("[PYTHON WORKER %s] Could not import the module. Reason: Method in class." % process_name)
@@ -424,24 +422,16 @@ def execute_task(process_name, storage_conf, params):
             logger.debug("[PYTHON WORKER %s] Processing callee, a hidden object of %s in file %s" % (process_name, file_name, type(obj)))
             values.insert(0, obj)
             types.pop()
-            types.insert(0, Type.OBJECT)
+            types.insert(0, TYPE.OBJECT)
 
             def task_execution_2():
-                # if tracing:
-                #    pyextrae.eventandcounters(TASK_EVENTS, 0)
-                #    pyextrae.eventandcounters(TASK_EVENTS, TASK_EXECUTION)
-                logger.debug("[PYTHON WORKER %s] Starting task execution" % process_name)
-                getattr(klass, method_name)(*values, compss_types=types, **compss_kwargs)
-                logger.debug("[PYTHON WORKER %s] Finished task execution" % process_name)
-                # if tracing:
-                #    pyextrae.eventandcounters(TASK_EVENTS, 0)
-                #    pyextrae.eventandcounters(TASK_EVENTS, WORKER_END)
+                return task_execution(logger, process_name, klass, method_name, types, values, compss_kwargs)
 
             if persistent_storage:
                 with TaskContext(logger, values, config_file_path=storage_conf):
-                    task_execution_2()
+                    newTypes, newValues = task_execution_2()
             else:
-                task_execution_2()
+                newTypes, newValues = task_execution_2()
 
             logger.debug("[PYTHON WORKER %s] Serializing self to file." % process_name)
             logger.debug("[PYTHON WORKER %s] Obj: %r" % (process_name, obj))
@@ -451,21 +441,13 @@ def execute_task(process_name, storage_conf, params):
             types.insert(0, None)  # class must be first type
 
             def task_execution_3():
-                # if tracing:
-                #    pyextrae.eventandcounters(TASK_EVENTS, 0)
-                #    pyextrae.eventandcounters(TASK_EVENTS, TASK_EXECUTION)
-                logger.debug("[PYTHON WORKER %s] Starting task execution" % process_name)
-                getattr(klass, method_name)(*values, compss_types=types, **compss_kwargs)
-                logger.debug("[PYTHON WORKER %s] Finished task execution" % process_name)
-                # if tracing:
-                #    pyextrae.eventandcounters(TASK_EVENTS, 0)
-                #    pyextrae.eventandcounters(TASK_EVENTS, WORKER_END)
+                return task_execution(logger, process_name, klass, method_name, types, values, compss_kwargs)
 
             if persistent_storage:
                 with TaskContext(logger, values, config_file_path=storage_conf):
-                    task_execution_3()
+                    newTypes, newValues = task_execution_3()
             else:
-                task_execution_3()
+                newTypes, newValues = task_execution_3()
 
     # EVERYTHING OK
     logger.debug("[PYTHON WORKER %s] End task execution. Status: Ok" % process_name)
@@ -473,9 +455,130 @@ def execute_task(process_name, storage_conf, params):
     # if tracing:
     #     pyextrae.eventandcounters(TASK_EVENTS, 0)
 
-    return 0
+    return 0, newTypes, newValues   # Exit code, updated params
 
 
+def get_input_params(num_params, logger, args, process_name, persistent_storage):
+    if persistent_storage:
+        from storage.api import getByID
+        from storage.api import TaskContext
+    pos = 0
+    values = []
+    types = []
+    streams = []
+    prefixes = []
+    for i in range(0, num_params):
+        pType = int(args[pos])
+        pStream = int(args[pos + 1])
+        pPrefix = args[pos + 2]
+        pValue = args[pos + 3]
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("[PYTHON WORKER %s] Parameter : %s" % (process_name, str(i)))
+            logger.debug("[PYTHON WORKER %s] \t * Type : %s" % (process_name, str(pType)))
+            logger.debug("[PYTHON WORKER %s] \t * Stream : %s" % (process_name, str(pStream)))
+            logger.debug("[PYTHON WORKER %s] \t * Prefix : %s" % (process_name, str(pPrefix)))
+            logger.debug("[PYTHON WORKER %s] \t * Value: %r" % (process_name, pValue))
+
+        types.append(pType)
+        streams.append(pStream)
+        prefixes.append(pPrefix)
+
+        if pType == TYPE.FILE:
+            values.append(pValue)
+        elif pType == TYPE.EXTERNAL_PSCO:
+            po = getByID(pValue)
+            values.append(po)
+            pos += 1  # Skip info about direction (R, W)
+        elif pType == TYPE.STRING:
+            num_substrings = int(pValue)
+            aux = ''
+            first_substring = True
+            for j in range(4, num_substrings + 4):
+                if not first_substring:
+                    aux += ' '
+                first_substring = False
+                aux += args[pos + j]
+            # Decode the string received
+            aux = base64.b64decode(aux)
+            #######
+            # Check if the string is really an object
+            # Required in order to recover objects passed as parameters.
+            # - Option object_conversion
+            real_value = aux
+            try:
+                # try to recover the real object
+                aux = deserialize_from_string(aux.decode('string_escape'))
+            except (SerializerException, ValueError, EOFError):
+                # was not an object
+                aux = real_value
+            #######
+            values.append(aux)
+            logger.debug("[PYTHON WORKER %s] \t * Final Value: %s" % (process_name, str(aux)))
+            pos += num_substrings
+        elif pType == TYPE.INT:
+            values.append(int(pValue))
+        elif pType == TYPE.LONG:
+            l = long(pValue)
+            if l > JAVA_MAX_INT or l < JAVA_MIN_INT:
+                # A Python int was converted to a Java long to prevent overflow
+                # We are sure we will not overflow Python int, otherwise this
+                # would have been passed as a serialized object.
+                l = int(l)
+            values.append(l)
+        elif pType == TYPE.DOUBLE:
+            values.append(float(pValue))
+        elif pType == TYPE.BOOLEAN:
+            if pValue == 'true':
+                values.append(True)
+            else:
+                values.append(False)
+        # elif (pType == TYPE.OBJECT):
+        #    pass
+        else:
+            logger.fatal("[PYTHON WORKER %s] Invalid type (%d) for parameter %d" % (process_name, pType, i))
+            exit(1)
+        pos += 4
+    return values, types, streams, prefixes
+
+
+def task_execution(logger, process_name, module, method_name, types, values, compss_kwargs):
+    # if tracing:
+    #    pyextrae.eventandcounters(TASK_EVENTS, 0)
+    #    pyextrae.eventandcounters(TASK_EVENTS, TASK_EXECUTION)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("[PYTHON WORKER %s] Starting task execution" % process_name)
+        logger.debug("[PYTHON WORKER %s] Types : %s " % (process_name, str(types)))
+        logger.debug("[PYTHON WORKER %s] Values: %s " % (process_name, str(values)))
+
+    # WARNING: the following call will not work if a user decorator overrides the return of the task decorator.
+    # newTypes, newValues = getattr(module, method_name)(*values, compss_types=types, **compss_kwargs)
+    # If the @task is decorated with a user decorator, may include more return values, and consequently,
+    # the newTypes and newValues will be within a tuple at position 0.
+    # Force users that use decorators on top of @task to return the task results first.
+    # This is tested with the timeit decorator in test 19.
+    taskOutput = getattr(module, method_name)(*values, compss_types=types, **compss_kwargs)
+
+    if isinstance(taskOutput[0], tuple):  # Weak but effective way to check it without doing inspect.
+        # Another decorator has added another return thing.
+        # TODO: Should we consider here to create a list with all elements and serialize it to a file with the real task output plus the decorator results? == taskOutput[1:]
+        # TODO: Currently, the extra result is ignored.
+        newTypes = taskOutput[0][0]
+        newValues = taskOutput[0][1]
+    else:
+        # The taskOutput is composed by the newTypes and newValues returned by the task decorator.
+        newTypes = taskOutput[0]
+        newValues = taskOutput[1]
+
+    if logger.isEnabledFor(logging.DEBUG):
+        # The types may change (e.g. if the user does a makePersistent within the task)
+        logger.debug("[PYTHON WORKER %s] Return Types : %s " % (process_name, str(newTypes)))
+        logger.debug("[PYTHON WORKER %s] Return Values: %s " % (process_name, str(newValues)))
+        logger.debug("[PYTHON WORKER %s] Finished task execution" % process_name)
+    # if tracing:
+    #    pyextrae.eventandcounters(TASK_EVENTS, 0)
+    #    pyextrae.eventandcounters(TASK_EVENTS, WORKER_END)
+    return newTypes, newValues
 
 
 def shutdown_handler(signal, frame):

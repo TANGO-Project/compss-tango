@@ -1,23 +1,22 @@
 #
-#  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
 #
-#  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+#  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
-"""
-@author: etejedor
-@author: fconejer
-@author: srodrig1
+# 
 
+
+
+"""
 PyCOMPSs Worker
 ===============
     This file contains the worker code.
@@ -30,9 +29,13 @@ import os
 import sys
 import traceback
 from exceptions import ValueError
+import base64
 
-from pycompss.api.parameter import Type, JAVA_MAX_INT, JAVA_MIN_INT
-from pycompss.util.serializer import serialize_to_file, deserialize_from_file, deserialize_from_string, SerializerException
+from pycompss.api.parameter import TYPE, JAVA_MAX_INT, JAVA_MIN_INT
+from pycompss.util.serializer import serialize_to_file
+from pycompss.util.serializer import deserialize_from_file
+from pycompss.util.serializer import deserialize_from_string
+from pycompss.util.serializer import SerializerException
 from pycompss.util.logs import init_logging_worker
 
 SYNC_EVENTS = 8000666
@@ -71,12 +74,12 @@ def compss_worker(persistent_storage):
 
     numSlaves = int(args[2])
     slaves = []
-    for i in range(2,2+numSlaves):
+    for i in range(2, 2 + numSlaves):
         slaves.append(args[i])
     argPosition = 3 + numSlaves
 
     args = args[argPosition:]
-    cus=args[0]
+    cus = args[0]
 
     args = args[1:]
     has_target = args[0]
@@ -117,18 +120,24 @@ def compss_worker(persistent_storage):
         streams.append(pStream)
         prefixes.append(pPrefix)
 
-        if pType == Type.FILE:
+        if pType == TYPE.FILE:
+            '''
             # check if it is a persistent object
+            # TODO: I find that it makes no sense to identify PSCOs this way
+            # Why do not we simply check if the object of a subclass of the
+            # storage_object?
             if 'getID' in dir(pValue) and pValue.getID() is not None:
                 po = getByID(pValue.getID())
                 values.append(po)
             else:
                 values.append(pValue)
-        elif pType == Type.EXTERNAL_PSCO:
+            '''
+            values.append(pValue)
+        elif pType == TYPE.EXTERNAL_PSCO:
             po = getByID(pValue)
             values.append(po)
             pos += 1  # Skip info about direction (R, W)
-        elif pType == Type.STRING:
+        elif pType == TYPE.STRING:
             num_substrings = int(pValue)
             aux = ''
             first_substring = True
@@ -137,6 +146,8 @@ def compss_worker(persistent_storage):
                     aux += ' '
                 first_substring = False
                 aux += args[pos + j]
+            # Decode the string received
+            aux = base64.b64decode(aux)
             #######
             # Check if the string is really an object
             # Required in order to recover objects passed as parameters.
@@ -144,7 +155,7 @@ def compss_worker(persistent_storage):
             real_value = aux
             try:
                 # try to recover the real object
-                aux = deserialize_from_string(aux)
+                aux = deserialize_from_string(aux.decode('string_escape'))
             except (SerializerException, ValueError, EOFError):
                 # was not an object
                 aux = real_value
@@ -152,9 +163,9 @@ def compss_worker(persistent_storage):
             values.append(aux)
             logger.debug("\t * Final Value: " + str(aux))
             pos += num_substrings
-        elif pType == Type.INT:
+        elif pType == TYPE.INT:
             values.append(int(pValue))
-        elif pType == Type.LONG:
+        elif pType == TYPE.LONG:
             l = long(pValue)
             if l > JAVA_MAX_INT or l < JAVA_MIN_INT:
                 # A Python int was converted to a Java long to prevent overflow
@@ -162,17 +173,17 @@ def compss_worker(persistent_storage):
                 # would have been passed as a serialized object.
                 l = int(l)
             values.append(l)
-        elif pType == Type.DOUBLE:
+        elif pType == TYPE.DOUBLE:
             values.append(float(pValue))
-        elif pType == Type.BOOLEAN:
+        elif pType == TYPE.BOOLEAN:
             if pValue == 'true':
                 values.append(True)
             else:
                 values.append(False)
-        # elif (pType == Type.OBJECT):
+        # elif (pType == TYPE.OBJECT):
         #    pass
         else:
-            logger.fatal("Invalid type (%d) for parameter %d" % (ptype, i))
+            logger.fatal("Invalid type (%d) for parameter %d" % (pType, i))
             exit(1)
         pos += 4
 
@@ -254,7 +265,7 @@ def compss_worker(persistent_storage):
             logger.debug("Processing callee, a hidden object of %s in file %s" % (file_name, type(obj)))
             values.insert(0, obj)
             types.pop()
-            types.insert(0, Type.OBJECT)
+            types.insert(0, TYPE.OBJECT)
 
             if persistent_storage:
                 with TaskContext(logger, values, config_file_path=storage_conf):
@@ -312,13 +323,11 @@ if __name__ == "__main__":
     # num_params = int(sys.argv[i+3])
     # params = sys.argv[i+4..]
 
-
     persistent_storage = False
     if storage_conf != 'null':
         persistent_storage = True
         from storage.api import initWorker as initStorageAtWorker
         from storage.api import finishWorker as finishStorageAtWorker
-
 
     if tracing:
         import pyextrae.multiprocessing as pyextrae

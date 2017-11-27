@@ -1,21 +1,22 @@
 #
-#  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
 #
-#  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+#  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
-"""
-@author: fconejer
+# 
 
+
+
+"""
 PyCOMPSs API - OMPSS
 ==================
     This file contains the class constraint, needed for the OmpSs task
@@ -43,12 +44,22 @@ class ompss(object):
         self.kwargs = kwargs
         logger.debug("Init @ompss decorator...")
 
-        # Get the computing nodes -- This parameter will have to go down until execution when invoked.
+        # Get the computing nodes: This parameter will have to go down until
+        # execution when invoked.
         if 'computingNodes' not in self.kwargs:
             self.kwargs['computingNodes'] = 1
         else:
-            self.kwargs['computingNodes'] = kwargs['computingNodes']
-        logger.debug("This MPI task will have " + str(self.kwargs['computingNodes']) + " computing nodes.")
+            cNs = kwargs['computingNodes']
+            if isinstance(cNs, int):
+                self.kwargs['computingNodes'] = kwargs['computingNodes']
+            elif isinstance(cNs, str) and cNs.strip().startswith('$'):
+                envVar = cNs.strip()[1:]  # Remove $
+                if envVar.startswith('{'):
+                    envVar = envVar[1:-1]  # remove brackets
+                self.kwargs['computingNodes'] = int(os.environ(envVar))
+            else:
+                raise Exception("Wrong Computing Nodes value at MPI decorator.")
+        logger.debug("This OMPSs task will have " + str(self.kwargs['computingNodes']) + " computing nodes.")
 
         # self = itself.
         # args = not used.
@@ -113,13 +124,13 @@ class ompss(object):
             # worker code
             pass
 
-
         @wraps(func)
         def ompss_f(*args, **kwargs):
             # This is executed only when called.
             logger.debug("Executing ompss_f wrapper.")
 
-            # Set the computingNodes variable in kwargs for its usage in @task decorator
+            # Set the computingNodes variable in kwargs for its usage
+            # in @task decorator
             kwargs['computingNodes'] = self.kwargs['computingNodes']
 
             if len(args) > 0:

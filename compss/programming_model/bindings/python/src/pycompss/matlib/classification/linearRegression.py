@@ -1,21 +1,22 @@
 #
-#  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
 #
-#  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+#  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
-"""
-@author: scorella
+# 
 
+
+
+"""
 PyCOMPSs Mathematical Library: Classification: Linear Regression
 ================================================================
     This file contains the linear regression algorithm.
@@ -98,7 +99,7 @@ def pearson(X, Y, mx, my):
     xxs = [_pow(x, 2) for x in xs]
     yys = [_pow(y, 2) for y in ys]
 
-    suma = mergeReduce(reduce_add, [multFrag(a, b) for (a,b) in zip(xs, ys)])
+    suma = mergeReduce(reduce_add, [multFrag(a, b) for (a, b) in zip(xs, ys)])
 
     sum_x = mergeReduce(reduce_add, map(_add, xxs))
     sum_y = mergeReduce(reduce_add, map(_add, yys))
@@ -106,17 +107,10 @@ def pearson(X, Y, mx, my):
     return r
 
 
-#@task(returns=types.LambdaType)
 @task(returns=(float, float))
 def computeLine(r, stdy, stdx, my, mx):
     b = r * (math.sqrt(stdy) / math.sqrt(stdx))
     A = my - b*mx
-
-    #def line(x):
-    #    return b*x-A
-    #line = lambda x: b*x-A
-    #return line
-    #return lambda x: b*x-A
     return b, A
 
 
@@ -135,16 +129,18 @@ def fit(X, Y, n):
     return lambda x: line[0] * x + line[1]
 
 
-# if __name__ == "__main__":
-#     from numpy import arange
-#     from numpy.random import randint
-#     from pylab import scatter, show, plot, savefig
-#     data = [[[1,2,3],[4,5,6]], [[1,2,3],[4,5,6]]]
-#     #data = [[list(randint(100, size=1000)) for _ in range(10)] for _ in range(2)]
-#     line = fit(data[0], data[1], 6)
-#     print [line(x) for x in arange(0.0,100.0,1.0)]
-#     datax = [item for sublist in data[0] for item in sublist]
-#     datay = [item for sublist in data[1] for item in sublist]
-#     scatter(datax, datay, marker='x')
-#     plot([line(x) for x in arange(0.0, 10.0, 0.1)], arange(0.0, 10.0, 0.1))
-#     savefig('lrd.png')
+'''
+if __name__ == "__main__":
+    from numpy import arange
+    from numpy.random import randint
+    from pylab import scatter, show, plot, savefig
+    data = [[[1,2,3],[4,5,6]], [[1,2,3],[4,5,6]]]
+    # data = [[list(randint(100, size=1000)) for _ in range(10)] for _ in range(2)]
+    line = fit(data[0], data[1], 6)
+    print [line(x) for x in arange(0.0,100.0,1.0)]
+    datax = [item for sublist in data[0] for item in sublist]
+    datay = [item for sublist in data[1] for item in sublist]
+    scatter(datax, datay, marker='x')
+    plot([line(x) for x in arange(0.0, 10.0, 0.1)], arange(0.0, 10.0, 0.1))
+    savefig('lrd.png')
+'''

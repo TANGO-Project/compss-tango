@@ -1,0 +1,50 @@
+#!/bin/bash
+
+  #--------------------------------------------------------------------------------
+  # Get script parameters
+  testNum=$1
+  COMPSsExec=$2
+  comm=$3
+  runcompss_opts=$4
+  baseDir=$5
+  COMPSsLogFolder=$6
+  skip=$7
+  MAX_RETRIES=$8
+
+  # Set script variables
+  logsBaseDir="${baseDir}"/logs
+
+  exitValue=0
+  results=""
+
+  #--------------------------------------------------------------------------------
+  # Source common execution script
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  # shellcheck source=./execute_commons
+  source "${SCRIPT_DIR}"/execute_commons
+
+  #--------------------------------------------------------------------------------
+  # Execute test application
+  echo -e "\e[0m"
+  echo -e "\e[34m*******************"
+  echo -e "\e[34m** Testing App $testNum **"
+  echo -e "\e[34m*******************"
+  echo -e "\e[0m"
+
+  if [ "$testNum" -lt 10 ]; then
+     appBaseDir="${baseDir}/app0$testNum"
+     appLogDir="${logsBaseDir}/app0$testNum"
+  else 
+     appBaseDir="${baseDir}/app$testNum"
+     appLogDir="${logsBaseDir}/app$testNum"
+  fi
+
+  execute_application "${COMPSsExec}" "${comm}" "${runcompss_opts}" "${COMPSsLogFolder}" "${appBaseDir}" "${appLogDir}" "${skip}" "${MAX_RETRIES}"
+  
+  # Show Result table
+  print_result "BASIC SPECIFIC" "$results"
+
+  #--------------------------------------------------------------------------------
+  # EXIT
+  exit "$exitValue"
+

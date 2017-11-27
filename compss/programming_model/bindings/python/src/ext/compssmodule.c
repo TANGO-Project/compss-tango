@@ -1,18 +1,20 @@
-/*
- *  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+/*         
+ *  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
  *
- *  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+ *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
  *  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  *  Unless required by applicable law or agreed to in writing, software
  *  distributed under the License is distributed on an "AS IS" BASIS,
  *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
+ *
  */
+
 #include <Python.h>
 
 /* ****************************************************************** */
@@ -50,17 +52,19 @@ stop_runtime(PyObject *self, PyObject *args)
 static PyObject *
 process_task(PyObject *self, PyObject *args)
 {
-	// printf ("####C#### PROCESS TASK\n");
+	  //printf ("####C#### PROCESS TASK\n");
     long app_id;
     const char* signature;
     int priority, num_nodes, replicated, distributed, has_target;
     PyObject* values;
     PyObject* compss_types;
     PyObject* compss_directions;
+    PyObject* compss_streams;
+    PyObject* compss_prefixes;
 
-    if(!PyArg_ParseTuple(args, "lsiiiiiOOO", &app_id, &signature, &priority,
+    if(!PyArg_ParseTuple(args, "lsiiiiiOOOOO", &app_id, &signature, &priority,
        &num_nodes, &replicated, &distributed, &has_target, &values, &compss_types,
-       &compss_directions)) {
+       &compss_directions, &compss_streams, &compss_prefixes)) {
         return NULL;
     }
 
@@ -76,7 +80,7 @@ process_task(PyObject *self, PyObject *args)
 	Py_ssize_t num_pars = PyList_Size(values);
 	//printf ("####C#### Num pars: %d\n", num_pars);
 
-	PyObject *type, *val, *direction;
+  PyObject *type, *val, *direction, *stream, *prefix;
 
 	Py_ssize_t j, pj;
     long l;
@@ -84,8 +88,9 @@ process_task(PyObject *self, PyObject *args)
     double d;
     char *s;
 
-    void **params[num_pars * 3];
-    int c_types[num_pars], c_directions[num_pars];
+    void **params[num_pars * 5];
+    int c_types[num_pars], c_directions[num_pars], c_streams[num_pars];
+    char *c_prefixes[num_pars];
     char *c_values, *ini_c_values;
 
     int val_size = 0;
@@ -94,12 +99,19 @@ process_task(PyObject *self, PyObject *args)
     for (j = 0; j < num_pars; j++) {
     	type = PyList_GetItem(compss_types, j); // this does not increment reference (we don't own it) so no need for decref
     	direction = PyList_GetItem(compss_directions, j);
+      stream = PyList_GetItem(compss_streams, j);
+      prefix = PyList_GetItem(compss_prefixes, j);
 
     	c_types[j] = (int)PyInt_AsLong(type);
     	c_directions[j] = (int)PyInt_AsLong(direction);
+      c_streams[j] = (int)PyInt_AsLong(stream);
+      c_prefixes[j] = PyString_AsString(prefix);
 
     	//printf ("#### c_type: %d\n", c_types[j]);
     	//printf ("#### c_direction: %d\n", c_directions[j]);
+      //printf ("#### c_stream: %d\n", c_streams[j]);
+      //printf ("#### c_prefix: %s\n", c_prefixes[j]);
+
     	switch ((enum datatype) c_types[j]) {
     	    case file_dt:
     	        //printf ("#### file_dt\n");
@@ -142,7 +154,7 @@ process_task(PyObject *self, PyObject *args)
     c_values = (char *)PyMem_Malloc(val_size); // allocate the memory in the Python heap
     ini_c_values = c_values;
     for (j = 0; j < num_pars; j++) {
-    	pj = j * 3;
+    	pj = j * 5;
     	val = PyList_GetItem(values, j); // this does not increment reference (we don't own it) so no need for decref
     	params[pj] = (void *)c_values;
     	switch ((enum datatype) c_types[j]) {
@@ -193,6 +205,8 @@ process_task(PyObject *self, PyObject *args)
     	}
     	params[pj+1] = (void *)&c_types[j];
     	params[pj+2] = (void *)&c_directions[j];
+      params[pj+3] = (void *)&c_streams[j];
+      params[pj+4] = (void *)&c_prefixes[j];
     }
 
     // Invoke the C library
@@ -212,6 +226,8 @@ process_task(PyObject *self, PyObject *args)
     Py_DECREF(values);
     Py_DECREF(compss_types);
     Py_DECREF(compss_directions);
+    Py_DECREF(compss_streams);
+    Py_DECREF(compss_prefixes);
 
     return Py_BuildValue("i", 0);
 }
@@ -285,7 +301,7 @@ get_logging_path(PyObject *self, PyObject *args)
 static PyObject *
 register_core_element(PyObject *self, PyObject *args)
 {
-    // printf ("####C#### REGISTER CORE ELEMENT\n");
+    //printf ("####C#### REGISTER CORE ELEMENT\n");
     const char* CESignature;
     const char* ImplSignature;
     const char* ImplConstraints;
@@ -307,7 +323,7 @@ register_core_element(PyObject *self, PyObject *args)
     int i;
     for (i=0; i<num_params; i++){
         ImplTypeArgs[i] = ((PyStringObject*) PyList_GetItem(typeArgs, i))->ob_sval;
-        // printf ("####C#### Implementation Type Arg: %s\n", ((PyStringObject*) PyList_GetItem(typeArgs, i))->ob_sval);
+        //printf ("####C#### Implementation Type Arg: %s\n", ((PyStringObject*) PyList_GetItem(typeArgs, i))->ob_sval);
     }
 
 	// Invoke the C library
@@ -318,7 +334,7 @@ register_core_element(PyObject *self, PyObject *args)
 	              num_params,
 	              ImplTypeArgs);
 
-	// printf("####C#### COMPSs ALREADY REGISTERED THE CORE ELEMENT\n");
+	//printf("####C#### COMPSs ALREADY REGISTERED THE CORE ELEMENT\n");
     return Py_BuildValue("i", 0);
 }
 

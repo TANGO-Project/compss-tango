@@ -1,18 +1,19 @@
 #
-#  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
 #
-#  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+#  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
+# 
+
 from distutils.core import setup, Extension
 #from setuptools import setup, Extension
 from distutils.command.install_lib import install_lib
@@ -37,13 +38,13 @@ thread_affinity = Extension('thread_affinity',
 )
 
 setup (name='pycompss',
-	version='2.1.rc1706',
+	version='2.2.rc1710',
 	description='Python Binding for COMP Superscalar Runtime',
 	long_description=open('README.txt').read(),
 	author='COMPSs Team',
 	author_email='support-compss@bsc.es',
 	url='http://compss.bsc.es',
-	license='Apache 2.1.rc1706',
+	license='Apache 2.2.rc1710',
     package_dir={'pycompss':'src/pycompss'},
 	packages=['', 'pycompss', 'pycompss.api', 'pycompss.runtime', 'pycompss.worker', 'pycompss.util', 'pycompss.util.serialization', 'pycompss.api.dummy', 'pycompss.functions', 'pycompss.matlib', 'pycompss.matlib.algebra', 'pycompss.matlib.classification', 'pycompss.matlib.clustering'],
 	package_data={'' : ['log/logging.json', 'log/logging.json.debug', 'log/logging.json.off', 'bin/worker_python.sh']},

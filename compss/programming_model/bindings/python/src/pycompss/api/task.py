@@ -1,23 +1,21 @@
 #
-#  Copyright 2.1.rc17062-2.1.rc17067 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002.2.rc1710017 Barcelona Supercomputing Center (www.bsc.es)
 #
-#  Licensed under the Apache License, Version 2.1.rc1706 (the "License");
+#  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.1.rc1706
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
-"""
-@author: etejedor
-@author: fconejer
-@author: srodrig1
+# 
 
+
+"""
 PyCOMPSs API - Task
 ===================
     This file contains the class task, needed for the task definition and the
@@ -28,7 +26,8 @@ import os
 import logging
 import pycompss.runtime.binding as binding
 from pycompss.runtime.core_element import CE
-from pycompss.util.serializer import serialize_objects, deserialize_from_file, deserialize_from_string
+from pycompss.util.serializer import serialize_objects
+from pycompss.util.serializer import deserialize_from_file
 from pycompss.util.interactiveHelpers import updateTasksCodeFile
 from pycompss.util.location import i_am_at_master
 from functools import wraps
@@ -42,8 +41,8 @@ SERIALIZATION = 121
 
 
 logger = logging.getLogger('pycompss.api.task')
-#logger = logging.getLogger()   # for jupyter logging
-#logger.setLevel(logging.DEBUG)
+# logger = logging.getLogger()   # for jupyter logging
+# logger.setLevel(logging.DEBUG)
 
 
 class task(object):
@@ -60,25 +59,37 @@ class task(object):
         self.kwargs = kwargs      # The only ones actually used: (decorators)
         self.is_instance = False
 
-        # Reserved PyCOMPSs keywords and default values
-        if 'isModifier' not in self.kwargs:
-            self.kwargs['isModifier'] = True
-        if 'returns' not in self.kwargs:
-            self.kwargs['returns'] = False
-        if 'priority' not in self.kwargs:
-            self.kwargs['priority'] = False
-        if 'isReplicated' not in self.kwargs:
-            self.kwargs['isReplicated'] = False
-        if 'isDistributed' not in self.kwargs:
-            self.kwargs['isDistributed'] = False
-
         # Pre-process decorator arguments
-        from pycompss.api.parameter import Parameter, Type, Direction
+        from pycompss.api.parameter import Parameter
+        from pycompss.api.parameter import IN
+        from pycompss.api.parameter import TYPE
+        from pycompss.api.parameter import DIRECTION
+
+        # Reserved PyCOMPSs keywords and default values
+
+        reserved_keywords = {
+            'isModifier': True,
+            'returns': False,
+            'priority': False,
+            'isReplicated': False,
+            'isDistributed': False,
+            'varargsType': IN
+        }
+
+        for (reserved_keyword, default_value) in reserved_keywords.items():
+            if reserved_keyword not in self.kwargs:
+                self.kwargs[reserved_keyword] = default_value
+
+        # Remove old args
+        for old_vararg in [x for x in self.kwargs.keys() if x.startswith('*args')]:
+            self.kwargs.pop(old_vararg)
+
         import copy
 
         if i_am_at_master():
             for arg_name in self.kwargs.keys():
-                if arg_name not in ['isModifier', 'returns', 'priority', 'isReplicated', 'isDistributed']:
+                if arg_name not in ['isModifier', 'returns', 'priority',
+                                    'isReplicated', 'isDistributed']:
                     # Prevent p.value from being overwritten later by ensuring
                     # each Parameter is a separate object
                     p = self.kwargs[arg_name]
@@ -86,30 +97,34 @@ class task(object):
                     self.kwargs[arg_name] = pcopy
 
         if self.kwargs['isModifier']:
-            direction = Direction.INOUT
+            direction = DIRECTION.INOUT
         else:
-            direction = Direction.IN
+            direction = DIRECTION.IN
 
         # Add callee object parameter
-        self.kwargs['self'] = Parameter(p_type=Type.OBJECT, p_direction=direction)
+        self.kwargs['self'] = Parameter(p_type=TYPE.OBJECT,
+                                        p_direction=direction)
 
         # Check the return type:
         if self.kwargs['returns']:
-            # This condition is interesting, because a user can write returns=list
-            # However, a list has the attribute __len__ but raises an exception.
-            # Since the user does not indicate the length, it will be managed as a single return.
-            # When the user specifies the length, it is possible to manage the elements independently.
+            # This condition is interesting, because a user can write
+            # returns=list
+            # However, lists have the attribute __len__ but raise an exception.
+            # Since the user does not indicate the length, it will be managed
+            # as a single return.
+            # When the user specifies the length, it is possible to manage the
+            # elements independently.
             if not hasattr(self.kwargs['returns'], '__len__') or type(self.kwargs['returns']) is type:
                 # Simple return
                 retType = getCOMPSsType(self.kwargs['returns'])
-                self.kwargs['compss_retvalue'] = Parameter(p_type=retType, p_direction=Direction.OUT)
+                self.kwargs['compss_retvalue'] = Parameter(p_type=retType, p_direction=DIRECTION.OUT)
             else:
                 # Multi return
                 i = 0
                 returns = []
                 for r in self.kwargs['returns']:  # This adds only one? - yep
                     retType = getCOMPSsType(r)
-                    returns.append(Parameter(p_type=retType, p_direction=Direction.OUT))
+                    returns.append(Parameter(p_type=retType, p_direction=DIRECTION.OUT))
                 self.kwargs['compss_retvalue'] = tuple(returns)
 
         logger.debug("Init @task decorator finished.")
@@ -129,17 +144,20 @@ class task(object):
 
         # Set default booleans
         self.is_instance = False
-        self.is_classmethod = False   # not used currently in this scope, only when registering the task
+        self.is_classmethod = False  # not used currently in this scope, only when registering the task
         self.has_varargs = False
         self.has_keywords = False
         self.has_defaults = False
         self.has_return = False
 
-        # Question: Will the first condition evaluate to false? spec_args will always be a named tuple, so
-        # it will always return true if evaluated as a bool
-        # Answer: The first condition evaluates if args exists (a list) and is not empty in the spec_args.
-        # The second checks if the first argument in that list is 'self'. In case that the args list exists and its
-        # first element is self, then the function is considered as an instance function (task defined within a class).
+        # Question: Will the first condition evaluate to false? spec_args will
+        # always be a named tuple, so it will always return true if evaluated
+        # as a bool
+        # Answer: The first condition evaluates if args exists (a list) and is
+        # not empty in the spec_args. The second checks if the first argument
+        # in that list is 'self'. In case that the args list exists and its
+        # first element is self, then the function is considered as an instance
+        # function (task defined within a class).
         if self.spec_args.args and self.spec_args.args[0] == 'self':
             self.is_instance = True
 
@@ -172,7 +190,8 @@ class task(object):
             try:
                 path = getattr(mod, "app_path")
             except AttributeError:
-                # This exception is raised when the runtime is not running and the @task decorator is used.
+                # This exception is raised when the runtime is not running and
+                # the @task decorator is used.
                 print("ERROR!!! The runtime has not been started yet. The function will be ignored.")
                 print("Please, start the runtime before using task decorated functions in order to avoid this error.")
                 print("Suggestion: Use the 'runcompss' command or the 'start' function from pycompss.interactive module depending on your needs.")
@@ -183,10 +202,12 @@ class task(object):
 
             # Do any necessary preprocessing action before executing any code
             if file_name.startswith('InteractiveMode'):
-                # If the file_name starts with 'InteractiveMode' means that the user is using PyCOMPSs
-                # from jupyter-notebook. Convention between this file and interactive.py
-                # In this case it is necessary to do a pre-processing step that consists
-                # of putting all user code that may be executed in the worker on a file.
+                # If the file_name starts with 'InteractiveMode' means that
+                # the user is using PyCOMPSs from jupyter-notebook.
+                # Convention between this file and interactive.py
+                # In this case it is necessary to do a pre-processing step
+                # that consists of putting all user code that may be executed
+                # in the worker on a file.
                 # This file has to be visible for all workers.
                 updateTasksCodeFile(f, path)
             else:
@@ -228,11 +249,13 @@ class task(object):
             is_distributed = self.kwargs['isDistributed']
             computingNodes = 1
             if 'computingNodes' in kwargs:
-                # There is a @mpi decorator over task that overrides the default value of computing nodes
+                # There is a @mpi decorator over task that overrides the
+                # default value of computing nodes
                 computingNodes = kwargs['computingNodes']
                 del kwargs['computingNodes']
 
-            # Check if this call is nested using the launch_pycompss_module function from launch.py.
+            # Check if this call is nested using the launch_pycompss_module
+            # function from launch.py.
             is_nested = False
             istack = inspect.stack()
             for i_s in istack:
@@ -243,16 +266,17 @@ class task(object):
 
             if not i_am_at_master() and (not is_nested):
                 # Task decorator worker body code.
-                workerCode(f,
-                           self.is_instance,
-                           self.has_varargs,
-                           self.has_keywords,
-                           self.has_defaults,
-                           self.has_return,
-                           args,
-                           kwargs,
-                           self.kwargs,
-                           self.spec_args)
+                newTypes, newValues = workerCode(f,
+                                                 self.is_instance,
+                                                 self.has_varargs,
+                                                 self.has_keywords,
+                                                 self.has_defaults,
+                                                 self.has_return,
+                                                 args,
+                                                 kwargs,
+                                                 self.kwargs,
+                                                 self.spec_args)
+                return newTypes, newValues
             else:
                 # Task decorator master body code.
                 # Returns the future object that will be used instead of the
@@ -310,16 +334,19 @@ def getModuleName(path, file_name):
 def registerTask(f, module, is_instance):
     """
     This function is used to register the task in the runtime.
-    This registration must be done only once on the task decorator initialization.
+    This registration must be done only once on the task decorator
+    initialization.
     :param f: Function to be registered
     :param module: Module that the function belongs to.
     """
     # Look for the decorator that has to do the registration
-    # Since the __init__ of the decorators is independent, there is no way to pass information through them.
-    # However, the __call__ method of the decorators can be used. The way that they are called is from bottom
-    # to top. So, the first one to call its __call__ method will always be @task.
-    # Consequently, the @task decorator __call__ method can detect the top decorator and pass a hint to order
-    # that decorator that has to do the registration (not the others).
+    # Since the __init__ of the decorators is independent, there is no way
+    # to pass information through them.
+    # However, the __call__ method of the decorators can be used.
+    # The way that they are called is from bottom to top. So, the first one to
+    # call its __call__ method will always be @task. Consequently, the @task
+    # decorator __call__ method can detect the top decorator and pass a hint
+    # to order that decorator that has to do the registration (not the others).
     gotFuncCode = False
     func = f
     while not gotFuncCode:
@@ -327,16 +354,38 @@ def registerTask(f, module, is_instance):
             funcCode = inspect.getsourcelines(func)
             gotFuncCode = True
         except IOError:
-            # There is one or more decorators below the @task --> undecorate until possible to get the func code.
-            # Example of this case: test 19: @timeit decorator below the @task decorator.
+            # There is one or more decorators below the @task --> undecorate
+            # until possible to get the func code.
+            # Example of this case: test 19: @timeit decorator below the
+            # @task decorator.
             func = func.__wrapped__
-    topDecorator = getTopDecorator(funcCode)
+
+    decoratorKeys = ("implement", "constraint", "decaf", "mpi", "ompss", "binary", "opencl", "task")
+
+    topDecorator = getTopDecorator(funcCode, decoratorKeys)
     logger.debug("[@TASK] Top decorator of function %s in module %s: %s" % (f.__name__, module, str(topDecorator)))
     f.__who_registers__ = topDecorator
+
+    # not usual tasks - handled by the runtime without invoking the PyCOMPSs
+    # worker. Needed to filter in order not to code the strings when using
+    # them in these type of tasks
+    filter = ("decaf", "mpi", "ompss", "binary", "opencl")
+    default = 'task'
+    taskType = getTaskType(funcCode, decoratorKeys, filter, default)
+    logger.debug("[@TASK] Task type of function %s in module %s: %s" % (f.__name__, module, str(taskType)))
+    f.__task_type__ = taskType
+    if taskType == default:
+        f.__code_strings__ = True
+    else:
+        f.__code_strings__ = False
+
     # Include the registering info related to @task
     ins = inspect.getouterframes(inspect.currentframe())
-    class_name = ins[2][3]  # I know that this is ugly, but I see no other way to get the class name
-    is_classmethod = class_name != '<module>' # I know that this is ugly, but I see no other way to check if it is a classs method.
+    # I know that this is ugly, but I see no other way to get the class name
+    class_name = ins[2][3]
+    # I know that this is ugly, but I see no other way to check if it is a
+    # classs method.
+    is_classmethod = class_name != '<module>'
     if is_instance or is_classmethod:
         ce_signature = module + "." + class_name + '.' + f.__name__
         implTypeArgs = [module + "." + class_name, f.__name__]
@@ -359,10 +408,9 @@ def registerTask(f, module, is_instance):
         binding.register_ce(coreElement)
 
 
-def workerCode(f, is_instance, has_varargs, has_keywords, has_defaults, has_return,
-               args, kwargs, self_kwargs, self_spec_args):
-    """
-    Task decorator body executed in the workers.
+def workerCode(f, is_instance, has_varargs, has_keywords, has_defaults,
+               has_return, args, kwargs, self_kwargs, self_spec_args):
+    """ Task decorator body executed in the workers.
     Its main function is to execute to execute the function decorated as task.
     Prior to the execution, the worker needs to retrieve the necessary parameters.
     These parameters will be used for the invocation of the function.
@@ -378,10 +426,16 @@ def workerCode(f, is_instance, has_varargs, has_keywords, has_defaults, has_retu
     :param kwargs: <Dictionary> - Contains the named objects that the function has been called with.
     :param self_kwargs: <Dictionary> - Decorator keywords dictionary.
     :param self_spec_args: <Named Tuple> - Function argspect
+    :return: Two lists: newTypes and newValues.
     """
     # Retrieve internal parameters from worker.py.
     tracing = kwargs.get('compss_tracing')
     process_name = kwargs.get('compss_process_name')
+
+    # types = kwargs['compss_types']
+    # values = args
+    newTypes = []
+    newValues = []
 
     if tracing:
         import pyextrae
@@ -390,7 +444,31 @@ def workerCode(f, is_instance, has_varargs, has_keywords, has_defaults, has_retu
 
     spec_args = self_spec_args.args
 
+    returns = self_kwargs['returns']
+    is_multi_return = False
+    num_return = 0
+
+    if has_return:
+        # Check if there is multireturn
+        if isinstance(returns, list) or isinstance(returns, tuple) or isinstance(returns, int):
+            if isinstance(returns, int):
+                num_return = returns
+            else:
+                num_return = len(returns)
+            if num_return > 1:
+                is_multi_return = True
+            else:
+                is_multi_return = False
+            # If there is a multireturn, we need to append as many arguments as returns
+            # are to the spec_args.
+            spec_args = spec_args[:-1] + [spec_args[-1] + str(i) for i in
+                                          range(num_return)]
+        else:
+            # The spec_args already has the compss_retvalue
+            num_return = 1
+
     toadd = []
+
     # Check if there is *arg parameter in the task
     if has_varargs:
         if binding.aargs_as_tuple:
@@ -403,13 +481,17 @@ def workerCode(f, is_instance, has_varargs, has_keywords, has_defaults, has_retu
                 num_aargs -= 1
             for i in range(num_aargs):
                 toadd.append('*' + self_spec_args.varargs + str(i))
+
     # Check if there is **kwarg parameters in the task
     if has_keywords:
         toadd.append(self_spec_args.keywords)
 
-    returns = self_kwargs['returns']
     if has_return:
-        spec_args = spec_args[:-1] + toadd + [spec_args[-1]]
+        # Include to add between the arguments and the returns
+        if is_multi_return:
+            spec_args = spec_args[:-num_return] + toadd + spec_args[-num_return:]
+        else:
+            spec_args = spec_args[:-1] + toadd + [spec_args[-1]]
     else:
         spec_args = spec_args + toadd
 
@@ -419,10 +501,13 @@ def workerCode(f, is_instance, has_varargs, has_keywords, has_defaults, has_retu
                                                self_kwargs,
                                                kwargs['compss_types'],
                                                process_name,
-                                               returns)
+                                               has_return,
+                                               is_multi_return,
+                                               num_return)
 
     if binding.aargs_as_tuple:
-        # Check if there is *arg parameter in the task, so the last element (*arg tuple) has to be flattened
+        # Check if there is *arg parameter in the task, so the last element
+        # (*arg tuple) has to be flattened
         if has_varargs:
             if has_keywords:
                 real_values = real_values[:-2] + list(real_values[-2]) + [real_values[-1]]
@@ -431,7 +516,8 @@ def workerCode(f, is_instance, has_varargs, has_keywords, has_defaults, has_retu
     else:
         pass
     kargs = {}
-    # Check if there is **kwarg parameter in the task, so the last element (kwarg dict) has to be flattened
+    # Check if there is **kwarg parameter in the task, so the last element
+    # (kwarg dict) has to be flattened
     if has_keywords:
         kargs = real_values[-1]         # kwargs dict
         real_values = real_values[:-1]  # remove kwargs from real_values
@@ -453,9 +539,8 @@ def workerCode(f, is_instance, has_varargs, has_keywords, has_defaults, has_retu
     if returns:
         # If there is multireturn then serialize each one on a different file
         # Multireturn example: a,b,c = fun() , where fun() has a return x,y,z
-        if isinstance(returns, list) or isinstance(returns, tuple):
-            num_ret = len(returns)
-            total_rets = len(args) - num_ret
+        if is_multi_return:
+            total_rets = len(args) - num_return
             rets = args[total_rets:]
             i = 0
             for ret_filename in rets:
@@ -469,13 +554,22 @@ def workerCode(f, is_instance, has_varargs, has_keywords, has_defaults, has_retu
             ret_filename = ret_filename.split(':')[-1]
             to_serialize.append((ret, ret_filename))
 
+    # Check if the values and types have changed after the task execution:
+    # I.e.- an object that has been made persistent within the task may be
+    # detected here, and the type change done within the outputTypes list.
+    newTypes, newValues, to_serialize = checkValueChanges(kwargs['compss_types'],
+                                                          list(args),
+                                                          to_serialize)
     if len(to_serialize) > 0:
         serialize_objects(to_serialize)
 
+    return newTypes, newValues
 
-def masterCode(f, self_module, is_instance, has_varargs, has_keywords, has_defaults, has_return,
-               is_replicated, is_distributed, num_nodes,
-               args, self_args, kwargs, self_kwargs, self_spec_args):
+
+def masterCode(f, self_module, is_instance, has_varargs, has_keywords,
+               has_defaults, has_return, is_replicated, is_distributed,
+               num_nodes, args, self_args, kwargs, self_kwargs,
+               self_spec_args):
     """
     Task decorator body executed in the master
     :param f: <Function> - Function to execute
@@ -536,9 +630,10 @@ def masterCode(f, self_module, is_instance, has_varargs, has_keywords, has_defau
         for p in self_spec_args.args[len(args):num_params]:
             if p in kwargs:
                 argsList.append(kwargs[p])
+                kwargs.pop(p)
             else:
                 for dp in default_params:
-                    if p in dp[0]:
+                    if p == dp[0]:
                         argsList.append(dp[1])
         args = tuple(argsList)
 
@@ -555,23 +650,31 @@ def masterCode(f, self_module, is_instance, has_varargs, has_keywords, has_defau
         if binding.aargs_as_tuple:
             # If the *args are expected to be managed as a tuple:
             args_names.append(aargs)  # Name used for the *args
-            args_vals.append(args[num_params:])  # last values will compose the *args parameter
+            # last values will compose the *args parameter
+            args_vals.append(args[num_params:])
         else:
             # If the *args are expected to be managed as individual elements:
             pos = 0
             for i in range(len(args[num_params:])):
                 args_names.append(aargs + str(pos))  # Name used for the *args
+                from copy import copy
+                self_kwargs[aargs + str(pos)] = copy(self_kwargs['varargsType'])
                 pos += 1
             args_vals = args_vals + list(args[num_params:])
     if has_keywords:  # **kwargs
         aakwargs = '**' + self_spec_args.keywords  # Name used for the **kwargs
         args_names.append(aakwargs)
+        # Check if some of the **kwargs are used as vals
+        if len(vals_names) > len(vals):
+            for i in range(len(vals), len(vals_names)):
+                vals.append(kwargs[vals_names[i]])
+                kwargs.pop(vals_names[i])
         # The **kwargs dictionary is considered as a single dictionary object.
         args_vals.append(kwargs)
 
     # Build the final list of parameter names
     spec_args = vals_names + args_names
-    if has_return: # 'compss_retvalue' in self_spec_args.args:
+    if has_return:
         spec_args += ['compss_retvalue']
     # Build the final list of values for each parameter
     values = tuple(vals + args_vals)
@@ -588,25 +691,102 @@ def masterCode(f, self_module, is_instance, has_varargs, has_keywords, has_defau
 ###############################################################################
 
 
-def getTopDecorator(code):
+def getTopDecorator(code, decoratorKeys):
     """
     Retrieves the decorator which is on top of the current task decorators stack.
     :param code: Tuple which contains the task code to analyse and the number of lines of the code.
+    :param decoratorKeys: Typle which contains the available decorator keys
     :return: the decorator name in the form "pycompss.api.__name__"
     """
     # Code has two fields:
     # code[0] = the entire function code.
     # code[1] = the number of lines of the function code.
     funcCode = code[0]
-    decoratorKeys = ("implement", "constraint", "decaf", "mpi", "ompss", "binary", "opencl", "task")
-    decorators = [l for l in funcCode if l.strip().startswith('@')]  # Could be improved if it stops when the first line without @ is found.
-                                                                     # but we have to be care if a decorator is commented (# before @)
-                                                                     # The strip is due to the spaces that appear before functions definitions,
-                                                                     # such as class methods.
+    decorators = [l.strip() for l in funcCode if l.strip().startswith('@')]
+    # Could be improved if it stops when the first line without @ is found,
+    # but we have to be care if a decorator is commented (# before @)
+    # The strip is due to the spaces that appear before functions definitions,
+    # such as class methods.
     for dk in decoratorKeys:
         for d in decorators:
-            if dk in d:
+            if d.startswith('@' + dk):
                 return "pycompss.api." + dk.lower()  # each decorator __name__
+
+
+def getTaskType(code, decoratorKeys, filter, default):
+    """
+    Retrieves the type of the task based on the decorators stack.
+    :param code: Tuple which contains the task code to analyse and the number of lines of the code.
+    :param decoratorKeys: Typle which contains the available decorator keys
+    :param filter: Typle which contains the filtering decorators. The one
+    used determines the type of the task. If none, then it is a normal task.
+    :return: the type of the task
+    """
+    # Code has two fields:
+    # code[0] = the entire function code.
+    # code[1] = the number of lines of the function code.
+    funcCode = code[0]
+    fulldecorators = [l.strip() for l in funcCode if l.strip().startswith('@')]
+    # Get only the decorators used. Remove @ and parameters.
+    decorators = [l[1:].split('(')[0] for l in fulldecorators]
+    # Look for the decorator used from the filter list and return it when found
+    for f in filter:
+        if f in decorators:
+            return f
+    # The decorator stack did not contain any of the filtering keys, then
+    # return the default key.
+    return default
+
+
+def checkValueChanges(types, values, to_serialize):
+    """
+    Check if the input values have changed and adapt its types accordingly.
+    Considers also changes that may affect to the to_serialize list.
+    NOTE: This function can also return the real_to_serialize list, which
+    contains the objects that should be serialized after checking the changes.
+    For example, if a return is a simple type (int), it can be considered
+    within the newTypes and newValues, poped from the to_serialize list, and
+    returned on the task return pipe.
+    However, the runtime does not support getting values from the return pipe.
+    For this reason, we continue using the to_serialize list to serialize the
+    return object into the return file. Consequently, the real_to_serialize
+    variable is not currently used, but should be considered when the runtime
+    provides support for returning simple objects through the pipe.
+    WARNING: Due to the runtime does not support gathering values from the
+    output pipe at worker, all values will be set to null but the PSCOs that
+    may have changed.
+    :param types: List of types of the values list
+    :param values: List of values used as task input
+    :param to_serialize: List of objects to be serialized
+    :return: Three lists, the new types, new values and new to_serialize list.
+    """
+    assert len(types) == len(values), 'Inconsistent state: type-value length mismatch.'
+    from pycompss.api.parameter import TYPE
+    # Update the existing PSCOS with their id.
+    for i in range(len(types)):
+        if types[i] == TYPE.EXTERNAL_PSCO:
+            values[i] = values[i].getID()
+    real_to_serialize = []
+    # Analise only PSCOS from to_serialize objects list
+    for ts in to_serialize:
+        # ts[0] == real object to serialize
+        # ts[1] == file path where to serialize
+        pos = 0
+        changed = False
+        for i in values:
+            if isinstance(i, str) and getCOMPSsType(ts[0]) == TYPE.EXTERNAL_PSCO and ts[1] in i:
+                # Include the PSCO id in the values list
+                values[pos] = ts[0].getID()
+                types[pos] = TYPE.EXTERNAL_PSCO
+                changed = True
+            pos += 1
+        if not changed:
+            real_to_serialize.append(ts)
+    # Put all values that do not match the EXTERNAL_PSCO type to null
+    for i in range(len(types)):
+        if not types[i] == TYPE.EXTERNAL_PSCO:
+            values[i] = 'null'
+    return types, values, real_to_serialize
 
 
 def getCOMPSsType(value):
@@ -615,37 +795,51 @@ def getCOMPSsType(value):
     :param value: Value to analyse
     :return: The Type of the value
     """
-    from pycompss.api.parameter import Type
+    from pycompss.api.parameter import TYPE
     if type(value) is bool:
-        return Type.BOOLEAN
+        return TYPE.BOOLEAN
     elif type(value) is str and len(value) == 1:
-        return Type.CHAR           # Char does not exist as char. Only for strings of length 1.
+        # Char does not exist as char. Only for strings of length 1.
+        return TYPE.CHAR
     elif type(value) is str and len(value) > 1:
-        return Type.STRING
-    #elif type(value) is byte:     # byte does not exist in python (instead bytes is an str alias)
-    #    return Type.BYTE
-    # elif type(value) is short:   # short does not exist in python... they are integers.
-    #    return Type.SHORT
+        return TYPE.STRING
+    # elif type(value) is byte:
+    # byte does not exist in python (instead bytes is an str alias)
+    #    return TYPE.BYTE
+    # elif type(value) is short:
+    # short does not exist in python... they are integers.
+    #    return TYPE.SHORT
     elif type(value) is int:
-        return Type.INT
+        return TYPE.INT
     elif type(value) is long:
-        return Type.LONG
+        return TYPE.LONG
     elif type(value) is float:
-        return Type.DOUBLE
+        return TYPE.DOUBLE
     # elif type(value) is double:  # In python, floats are doubles.
-    #     return Type.DOUBLE
+    #     return TYPE.DOUBLE
     elif type(value) is str:
-        return Type.STRING
-    # elif type(value) is :       # Unavailable
-    #     return Type.OBJECT
-    # elif type(value) is :       # Unavailable # TODO: THIS TYPE WILL HAVE TO BE USED INSTEAD OF EXTERNAL
-    #     return Type.PSCO
-    # elif 'getID' in dir(value):
-    #     # It is a storage object, but at this point we do not know if its going to be persistent or not.
-    #     return Type.EXTERNAL_PSCO
+        return TYPE.STRING
+    # elif type(value) is :  # Unavailable - The runtime does not support python objects
+    #     return TYPE.OBJECT
+    # elif type(value) is :  # Unavailable - PSCOs not persisted will be handled as objects (as files)
+    #     return TYPE.PSCO
+
+    # TODO: I find that it makes no sense to identify PSCOs this way
+    # Why do not we simply check if the object of a subclass of the
+    # storage_object?
+    elif 'getID' in dir(value):
+        try:
+            if value.getID() is not None:  # the 'getID' + id == criteria for persistent object
+                return TYPE.EXTERNAL_PSCO
+        except TypeError:
+            # A PSCO class has been used to check its type (when checking
+            # the return). Since we still don't know if it is going to be
+            # persistend inside, we assume that it is not. It will be checked
+            # later on the worker side when the task finishes.
+            return TYPE.FILE
     else:
         # Default type
-        return Type.FILE
+        return TYPE.FILE
 
 
 def get_default_args(f):
@@ -660,7 +854,7 @@ def get_default_args(f):
 
 def reveal_objects(values,
                    spec_args, deco_kwargs, compss_types,
-                   process_name, returns):
+                   process_name, has_return, is_multi_return, num_return):
     """
     Function that goes through all parameters in order to
     find and open the files.
@@ -669,17 +863,25 @@ def reveal_objects(values,
     :param deco_kwargs: <List> - The decoratos.
     :param compss_types: <List> - The types of the values.
     :param process_name: <String> - Process name (id).
-    :param returns: If the function returns a value. Type = Boolean.
+    :param has_returns: <Boolean>  - If the function returns a value.
+    :param is_multi_return: <Boolean> - If the return is a multireturn.
+    :param num_return: <Int> - Number of returns
     :return: a list with the real values
     """
-    from pycompss.api.parameter import Parameter, Type, Direction
+    from pycompss.api.parameter import Parameter
+    from pycompss.api.parameter import TYPE
+    from pycompss.api.parameter import DIRECTION
 
     num_pars = len(spec_args)
     real_values = []
     to_serialize = []
 
-    if returns:
-        num_pars -= 1    # return value must not be passed to the function call
+    if has_return:
+        num_pars -= num_return   # return value must not be passed to the function call
+
+    # print('Spec args: %s'%(str(spec_args)))
+    # print('COMPSs Types: %s'%(str(compss_types)))
+    # print('Values: %s'%(str(values)))
 
     for i in range(num_pars):
         spec_arg = spec_args[i]
@@ -688,25 +890,22 @@ def reveal_objects(values,
         if i == 0:
             if spec_arg == 'self':  # callee object
                 if deco_kwargs['isModifier']:
-                    d = Direction.INOUT
+                    d = DIRECTION.INOUT
                 else:
-                    d = Direction.IN
-                deco_kwargs[spec_arg] = Parameter(p_type=Type.OBJECT, p_direction=d)
+                    d = DIRECTION.IN
+                deco_kwargs[spec_arg] = Parameter(p_type=TYPE.OBJECT,
+                                                  p_direction=d)
             elif inspect.isclass(value):  # class (it's a class method)
                 real_values.append(value)
                 continue
 
         p = deco_kwargs.get(spec_arg)
         if p is None:  # decoration not present, using default
-            p = Parameter()
+            p = deco_kwargs['varargsType'] if spec_arg.startswith('*args') else Parameter()
 
-        import time
-        def elapsed(start):
-            return time.time() - start
-
-        if compss_type == Type.FILE and p.type != Type.FILE:
-            # Getting ids and file names from passed files and objects patern is "originalDataID:destinationDataID;flagToPreserveOriginalData:flagToWrite:PathToFile"
-            # forig, fdest, preserve, write_final, fname = value.split(':')
+        if compss_type == TYPE.FILE and p.type != TYPE.FILE:
+            # Getting ids and file names from passed files and objects pattern
+            # is: "originalDataID:destinationDataID;flagToPreserveOriginalData:flagToWrite:PathToFile"
             complete_fname = value.split(':')
             if len(complete_fname) > 1:
                 # In NIO we get more information
@@ -718,6 +917,7 @@ def reveal_objects(values,
                 preserve, write_final = list(map(lambda x: x == "true", [preserve, write_final]))
                 suffix_name = forig
             else:
+                # In GAT we only get the name
                 fname = complete_fname[0]
 
             value = fname
@@ -725,12 +925,11 @@ def reveal_objects(values,
             logger.debug("Processing a hidden object in parameter %d", i)
             obj = deserialize_from_file(value)
             real_values.append(obj)
-            if p.direction != Direction.IN:
+            if p.direction != DIRECTION.IN:
                 to_serialize.append((obj, value))
         else:
-            print('compss_type' + str(compss_type)+ ' type'+ str(p.type))
-            if compss_type == Type.FILE:
-                # forig, fdest, preserve, write_final, fname = value.split(':')
+            # print('compss_type' + str(compss_type) + ' type' + str(p.type))
+            if compss_type == TYPE.FILE:
                 complete_fname = value.split(':')
                 if len(complete_fname) > 1:
                     # In NIO we get more information
