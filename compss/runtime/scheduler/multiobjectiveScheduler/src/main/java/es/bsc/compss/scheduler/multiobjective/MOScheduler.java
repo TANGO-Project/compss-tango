@@ -19,14 +19,13 @@ package es.bsc.compss.scheduler.multiobjective;
 
 import es.bsc.compss.components.impl.ResourceScheduler;
 import es.bsc.compss.components.impl.TaskScheduler;
+import es.bsc.compss.scheduler.multiobjective.config.MOConfiguration;
 import es.bsc.compss.scheduler.multiobjective.types.MOProfile;
 import es.bsc.compss.scheduler.multiobjective.types.MOScore;
 import es.bsc.compss.scheduler.types.AllocatableAction;
 import es.bsc.compss.scheduler.types.Score;
-import es.bsc.compss.types.CloudProvider;
 import es.bsc.compss.types.resources.Worker;
 import es.bsc.compss.types.resources.WorkerResourceDescription;
-import es.bsc.compss.types.resources.description.CloudInstanceTypeDescription;
 import es.bsc.compss.util.ResourceOptimizer;
 import es.bsc.compss.util.SchedulingOptimizer;
 
@@ -40,6 +39,7 @@ import org.json.JSONObject;
 public class MOScheduler extends TaskScheduler {
 
     public MOScheduler() {
+        MOConfiguration.load();
     }
 
     @Override
@@ -121,11 +121,4 @@ public class MOScheduler extends TaskScheduler {
         }
     }
 
-    public JSONObject getJSONForCloudInstanceTypeDescription(CloudProvider cp, CloudInstanceTypeDescription ctid) {
-        return jsm.getJSONForCloudInstanceTypeDescription(cp, ctid);
-    }
-
-    public MOProfile getDefaultProfile(CloudProvider cp, CloudInstanceTypeDescription ctid, int coreId, int implId) {
-        return generateProfile(jsm.getJSONForImplementation(cp, ctid, coreId, implId));
-    }
 }

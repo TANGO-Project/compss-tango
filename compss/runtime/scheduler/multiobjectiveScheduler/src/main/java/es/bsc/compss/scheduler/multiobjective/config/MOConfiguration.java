@@ -35,7 +35,10 @@ public class MOConfiguration {
         ENERGY // Energy param
     }
 
-
+    public static final long DATA_TRANSFER_DELAY = 10;
+    public static final double DEFAULT_IDLE_POWER = 1;
+    public static final double DEFAULT_IDLE_PRICE = 0;
+    
     // Optimization Parameter
     private static OptimizationParameter OP_PARAMETER = OptimizationParameter.TIME;
 
@@ -106,5 +109,7 @@ public class MOConfiguration {
     public static OptimizationParameter getSchedulerOptimization() {
         return OP_PARAMETER;
     }
+    
+    
     
 }

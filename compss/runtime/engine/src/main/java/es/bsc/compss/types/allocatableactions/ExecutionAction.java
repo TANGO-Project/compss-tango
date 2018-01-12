@@ -297,15 +297,12 @@ public class ExecutionAction extends AllocatableAction {
     public final void completedJob(Job<?> job) {
         // End profile
         profile.end();
-
         // Notify end
         int jobId = job.getJobId();
         JOB_LOGGER.info(
                 "Received a notification for job " + jobId + " with state OK (avg. duration: " + profile.getAverageExecutionTime() + ")");
-
         // Job finished, update info about the generated/updated data
         doOutputTransfers(job);
-
         // Notify completion
         notifyCompleted();
     }
@@ -334,7 +331,6 @@ public class ExecutionAction extends AllocatableAction {
                         }
                         break;
                 }
-
                 String name = dId.getRenaming();
                 if (job.getType() == TaskType.METHOD) {
                     String targetProtocol = null;
@@ -359,7 +355,6 @@ public class ExecutionAction extends AllocatableAction {
                             targetProtocol = DataLocation.Protocol.ANY_URI.getSchema();
                             break;
                     }
-
                     DataLocation outLoc = null;
                     try {
                         SimpleURI targetURI = new SimpleURI(targetProtocol + dp.getDataTarget());
@@ -506,7 +501,7 @@ public class ExecutionAction extends AllocatableAction {
         }
         this.schedule(actionScore, candidates);
     }
-    
+
     @SuppressWarnings("unchecked")
     @Override
     public final void tryToSchedule(Score actionScore) throws BlockedActionException, UnassignedActionException {
@@ -523,19 +518,24 @@ public class ExecutionAction extends AllocatableAction {
         } else {
             // Free scheduling
             List<ResourceScheduler<? extends WorkerResourceDescription>> compatibleCandidates = getCompatibleWorkers();
-            for(ResourceScheduler<? extends WorkerResourceDescription> currentWorker : compatibleCandidates) {
-                if(currentWorker.getResource().hasAvailableSlots()){
+            if (compatibleCandidates.size() == 0) {
+                throw new BlockedActionException();
+            }
+            for (ResourceScheduler<? extends WorkerResourceDescription> currentWorker : compatibleCandidates) {
+                if (currentWorker.getResource().hasAvailableSlots()) {
                     candidates.add(currentWorker);
                 }
             }
-            if(candidates.size() == 0){
+            if (candidates.size() == 0) {
                 throw new UnassignedActionException();
             }
         }
         this.schedule(actionScore, candidates);
     }
-    
-    private final <T extends WorkerResourceDescription> void schedule(Score actionScore, List<ResourceScheduler<? extends WorkerResourceDescription>> candidates) throws BlockedActionException, UnassignedActionException {
+
+    private final <T extends WorkerResourceDescription> void schedule(Score actionScore,
+            List<ResourceScheduler<? extends WorkerResourceDescription>> candidates)
+            throws BlockedActionException, UnassignedActionException {
         // COMPUTE BEST WORKER AND IMPLEMENTATION
         StringBuilder debugString = new StringBuilder("Scheduling " + this + " execution:\n");
         ResourceScheduler<? extends WorkerResourceDescription> bestWorker = null;
@@ -575,7 +575,7 @@ public class ExecutionAction extends AllocatableAction {
             throw new BlockedActionException();
         }
 
-        schedule(bestWorker, bestImpl); 
+        schedule(bestWorker, bestImpl);
     }
 
     @Override

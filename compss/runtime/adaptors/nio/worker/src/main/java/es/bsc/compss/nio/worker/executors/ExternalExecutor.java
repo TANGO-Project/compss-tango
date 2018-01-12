@@ -150,6 +150,10 @@ public abstract class ExternalExecutor extends Executor {
         addArguments(args, nt, nw);
 
         addThreadAffinity(args, assignedCoreUnits);
+        
+        addGPUAffinity(args, assignedGPUs);
+        
+        addHostlist(args);
 
         String externalCommand = getArgumentsAsString(args);
 
@@ -159,7 +163,16 @@ public abstract class ExternalExecutor extends Executor {
         executeExternal(nt.getJobId(), command, nt, nw);
     }
 
-    private void addThreadAffinity(ArrayList<String> args, int[] assignedCoreUnits) {
+    private void addHostlist(ArrayList<String> args) {
+		String hostlist = System.getProperty(Constants.COMPSS_HOSTNAMES);
+    	if (hostlist!=null && !hostlist.isEmpty()){
+    		args.add(hostlist);
+    	}else{
+    		args.add("-");
+    	}
+	}
+
+	private void addThreadAffinity(ArrayList<String> args, int[] assignedCoreUnits) {
         String computingUnits;
         if (assignedCoreUnits.length == 0) {
             computingUnits = "-";
@@ -167,6 +180,19 @@ public abstract class ExternalExecutor extends Executor {
             computingUnits = String.valueOf(assignedCoreUnits[0]);
             for (int i = 1; i < assignedCoreUnits.length; ++i) {
                 computingUnits = computingUnits + "," + assignedCoreUnits[i];
+            }
+        }
+        args.add(computingUnits);
+    }
+    
+    private void addGPUAffinity(ArrayList<String> args, int[] assignedGPUs) {
+        String computingUnits;
+        if (assignedGPUs.length == 0) {
+            computingUnits = "-";
+        } else {
+            computingUnits = String.valueOf(assignedGPUs[0]);
+            for (int i = 1; i < assignedGPUs.length; ++i) {
+                computingUnits = computingUnits + "," + assignedGPUs[i];
             }
         }
         args.add(computingUnits);

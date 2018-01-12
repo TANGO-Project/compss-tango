@@ -92,6 +92,7 @@
                         <url>http://compss.bsc.es/artifactory/grid-devel-repo</url>
                 </repository>
         </distributionManagement>    
+
 	<!-- SUB-MODULES -->
 	<modules>
 		<module>compss</module>

@@ -56,7 +56,7 @@ class mpi(object):
                 envVar = cNs.strip()[1:]  # Remove $
                 if envVar.startswith('{'):
                     envVar = envVar[1:-1]  # remove brackets
-                self.kwargs['computingNodes'] = int(os.environ(envVar))
+                self.kwargs['computingNodes'] = int(os.environ[envVar])
             else:
                 raise Exception("Wrong Computing Nodes value at MPI decorator.")
         logger.debug("This MPI task will have " + str(self.kwargs['computingNodes']) + " computing nodes.")

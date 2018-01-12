@@ -45,6 +45,7 @@ static PyObject* pysched_getaffinity(PyObject* self, PyObject* args) {
   cpu_set_t set_cpus;
   if(sched_getaffinity(pid, sizeof(cpu_set_t), &set_cpus) < 0) {
     PyErr_SetString(PyExc_RuntimeError, "Error during sched_getaffinity call!");
+    Py_RETURN_NONE;
   }
   std::vector<int> ret_val;
   for(int i=0; i<__CPU_SETSIZE; ++i) {

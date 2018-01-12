@@ -43,6 +43,14 @@ struct arg_t {
   int nThreads;
 };
 
+int get_compss_worker_lock(){
+  return pthread_mutex_lock(&mtx);
+}
+
+int release_compss_worker_lock(){
+  return pthread_mutex_unlock(&mtx);
+}
+
 
 //Reads a command when the other end of the pipe is written
 string readline(const char* inPipe) {

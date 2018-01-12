@@ -231,7 +231,7 @@ public abstract class ExternalThreadPool extends JobsThreadPool {
         // Wait for piper process builder to end
         // Check out end status and close gobblers
         try {
-        	LOGGER.info("Waiting for finishing piper process");
+            LOGGER.info("Waiting for finishing piper process");
             int exitCode = piper.waitFor();
             if (NIOTracer.isActivated()) {
                 NIOTracer.emitEvent(NIOTracer.EVENT_END, NIOTracer.getSyncType());

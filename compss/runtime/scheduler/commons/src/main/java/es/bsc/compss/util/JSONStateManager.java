@@ -29,6 +29,7 @@ import es.bsc.compss.COMPSsConstants;
 import es.bsc.compss.components.impl.ResourceScheduler;
 import es.bsc.compss.scheduler.types.Profile;
 import es.bsc.compss.types.CloudProvider;
+import es.bsc.compss.types.resources.CloudMethodWorker;
 import es.bsc.compss.types.resources.Worker;
 import es.bsc.compss.types.resources.WorkerResourceDescription;
 import es.bsc.compss.types.resources.description.CloudInstanceTypeDescription;
@@ -161,14 +162,21 @@ public class JSONStateManager {
     }
 
     public <T extends WorkerResourceDescription> JSONObject getJSONForResource(Worker<T> resource) {
-        try {
+    	
             JSONObject resourcesJSON = getJSONForResources();
             if (resourcesJSON != null) {
-                return resourcesJSON.getJSONObject(resource.getName());
+            	try {
+            		return resourcesJSON.getJSONObject(resource.getName());
+            	} catch (JSONException je) {
+            		if (resource instanceof CloudMethodWorker){
+            			CloudMethodWorker cmw = (CloudMethodWorker)resource;
+            			if (!cmw.getDescription().getTypeComposition().isEmpty()){
+            				return getJSONForCloudInstanceTypeDescription(cmw.getProvider(), cmw.getDescription().getTypeComposition().keySet().iterator().next());
+            			}
+            		}
+            	}
             }
-        } catch (JSONException je) {
-            // Do nothing it will return null
-        }
+        
         return null;
     }
 

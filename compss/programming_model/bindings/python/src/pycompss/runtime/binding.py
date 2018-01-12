@@ -320,7 +320,11 @@ def register_ce(coreElement):
     # Build constraints string from constraints dictionary
     implConstraints_string = ''
     for key, value in implConstraints.iteritems():
-        implConstraints_string += key + ':' + str(value) + ';'
+        if isinstance(value, list):
+            val = str(value).replace('\'', '')
+            implConstraints_string += key + ':' + str(val) + ';'
+        else:
+            implConstraints_string += key + ':' + str(value) + ';'
 
     logger.debug('\t - Implementation constraints: %s' % (implConstraints_string))
     logger.debug('\t - Implementation type: %s' % (implType))
@@ -700,6 +704,9 @@ def infer_types_and_serialize_objects(spec_args, first_par, num_pars,
             # It is a class function
             if spec_arg == 'self':
                 p.value = args[0]
+                # Check if self is a persistent object and set its type if it really is.
+                if 'getID' in dir(p.value) and p.value.getID() is not None:  # criteria for persistent object
+                    p.type = TYPE.EXTERNAL_PSCO
             elif spec_arg.startswith('compss_retvalue'):
                 p.value = fileNames[spec_arg]
             else:

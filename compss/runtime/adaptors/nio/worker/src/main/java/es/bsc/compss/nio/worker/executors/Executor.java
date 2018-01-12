@@ -26,6 +26,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -133,7 +134,6 @@ public abstract class Executor implements Runnable {
         // Sets the process environment variables (just in case its a MPI or OMPSs task)
         List<String> hostnames = nt.getSlaveWorkersNodeNames();
         hostnames.add(nw.getHostName());
-
         int numNodes = hostnames.size();
         int cus = nt.getResourceDescription().getTotalCPUComputingUnits();
 
@@ -197,6 +197,9 @@ public abstract class Executor implements Runnable {
             return true;
         } catch (Exception e) {
             LOGGER.error(e.getMessage(), e);
+            //Writing in the task .err/.out 
+            System.out.println("Exception executing task " + e.getMessage());
+            e.printStackTrace();
             return false;
         } finally {
             // Always clean the task sandbox working dir
@@ -283,10 +286,10 @@ public abstract class Executor implements Runnable {
         if (twd != null && !twd.isSpecific()) {
             // Only clean task sandbox if it is not specific
             File workingDir = twd.getWorkingDir();
-            if (workingDir != null && workingDir.exists()) {
+            if (workingDir != null && workingDir.exists() && workingDir.isDirectory()) {
                 try {
                     LOGGER.debug("Deleting sandbox " + workingDir.toPath());
-                    Files.deleteIfExists(workingDir.toPath());
+                    FileUtils.deleteDirectory(workingDir);
                 } catch (IOException e) {
                     LOGGER.warn("Error deleting sandbox " + e.getMessage(), e);
                 }

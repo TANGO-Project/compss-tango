@@ -57,33 +57,29 @@ import org.json.JSONObject;
 
 public class MOResourceScheduler<T extends WorkerResourceDescription> extends ResourceScheduler<T> {
 
-    public static final long DATA_TRANSFER_DELAY = 10;
-    private static final double DEFAULT_IDLE_POWER = 1;
-    private static final double DEFAULT_IDLE_PRICE = 0;
-
     // Logger
     protected static final Logger LOGGER = LogManager.getLogger(Loggers.TS_COMP);
     protected static final boolean IS_DEBUG = LOGGER.isDebugEnabled();
     protected static final String LOG_PREFIX = "[MOResourceScheduler] ";
 
     private final LinkedList<Gap> gaps;
-    private double pendingActionsEnergy = 0;
-    private double pendingActionsCost = 0;
+    private double pendingActionsEnergy = 0; // mJ
+    private double pendingActionsCost = 0; // Currency*ms/h
     private int[][] implementationsCount;
     private int[][] runningImplementationsCount;
-    private double runningActionsEnergy = 0;
-    private double runningActionsCost = 0;
+    private double runningActionsEnergy = 0; // mJ
+    private double runningActionsCost = 0; // Currency*ms/h
 
-    private double runActionsEnergy = 0;
-    private double runActionsCost = 0;
+    private double runActionsEnergy = 0; // mJ
+    private double runActionsCost = 0; // Currency*ms/h
 
     private OptimizationAction opAction;
     private final Set<AllocatableAction> pendingUnschedulings = new HashSet<>();
     private AllocatableAction resourceBlockingAction = new OptimizationAction();
     private AllocatableAction dataBlockingAction = new OptimizationAction();
     private long expectedEndTimeRunning;
-    private final double idlePower;
-    private final double idlePrice;
+    private final double idlePower; // W
+    private final double idlePrice; // Currency/h
 
 
     public MOResourceScheduler(Worker<T> w, JSONObject resourceJSON, JSONObject implsJSON) {
@@ -96,7 +92,6 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
             implementationsCount[coreId] = new int[CoreManager.getCoreImplementations(coreId).size()];
             runningImplementationsCount[coreId] = new int[CoreManager.getCoreImplementations(coreId).size()];
         }
-        MOConfiguration.load();
         expectedEndTimeRunning = 0;
         double idlePower;
         double idlePrice;
@@ -105,17 +100,17 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
             try {
                 idlePower = resourceJSON.getDouble("idlePower");
             } catch (JSONException je) {
-                idlePower = DEFAULT_IDLE_POWER;
+                idlePower = MOConfiguration.DEFAULT_IDLE_POWER;
             }
 
             try {
                 idlePrice = resourceJSON.getDouble("idlePrice");
             } catch (JSONException je) {
-                idlePrice = DEFAULT_IDLE_PRICE;
+                idlePrice = MOConfiguration.DEFAULT_IDLE_PRICE;
             }
         } else {
-            idlePower = DEFAULT_IDLE_POWER;
-            idlePrice = DEFAULT_IDLE_PRICE;
+            idlePower = MOConfiguration.DEFAULT_IDLE_POWER;
+            idlePrice = MOConfiguration.DEFAULT_IDLE_PRICE;
         }
         this.idlePower = idlePower;
         this.idlePrice = idlePrice;
@@ -151,7 +146,7 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
             }
         }
         long actionPriority = actionScore.getActionScore();
-        long expectedDataAvailable = ((MOScore) actionScore).getExpectedDataAvailable() + resScore * DATA_TRANSFER_DELAY;
+        long expectedDataAvailable = ((MOScore) actionScore).getExpectedDataAvailable() + resScore * MOConfiguration.DATA_TRANSFER_DELAY;
         return new MOScore(actionPriority, expectedDataAvailable, lessTimeStamp, 0, 0, 0);
     }
 
@@ -165,6 +160,21 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
      */
     @Override
     public Score generateImplementationScore(AllocatableAction action, TaskDescription params, Implementation impl, Score resourceScore) {
+        long resourceFreeTime = getResourceFreeTime(impl);
+        long expectedDataAvailable = ((MOScore) resourceScore).getExpectedDataAvailable();
+        long actionPriority = resourceScore.getActionScore();
+        return generateMOScore(resourceFreeTime, expectedDataAvailable, actionPriority, impl);
+    }
+
+    public MOScore generateMoveImplementationScore(AllocatableAction action, TaskDescription params, Implementation impl,
+            Score resourceScore, long moveTime) {
+        long resourceFreeTime = getResourceFreeTime(impl) + moveTime;
+        long expectedDataAvailable = ((MOScore) resourceScore).getExpectedDataAvailable() + moveTime;
+        long actionPriority = resourceScore.getActionScore();
+        return generateMOScore(resourceFreeTime, expectedDataAvailable, actionPriority, impl);
+    }
+
+    private long getResourceFreeTime(Implementation impl) {
         ResourceDescription rd = impl.getRequirements().copy();
         long resourceFreeTime = 0;
         try {
@@ -181,18 +191,39 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
         if (resourceFreeTime < 0) {
             resourceFreeTime = 0;
         }
+        return resourceFreeTime;
+    }
+
+    public MOScore generateCurrentImplementationScore(AllocatableAction action, Implementation impl, Score resourceScore) {
+        // Check if it is to be deleted
+        long resourceFreeTime = Long.MAX_VALUE;
+        Gap g = gaps.peekFirst();
+        if (g != null) {
+            resourceFreeTime = ((MOSchedulingInformation) action.getSchedulingInfo()).getExpectedStart();
+        }
+        long expectedDataAvailable = ((MOScore) resourceScore).getExpectedDataAvailable();
+        long actionPriority = resourceScore.getActionScore();
+        return generateMOScore(resourceFreeTime, expectedDataAvailable, actionPriority, impl);
+
+    }
+
+    public MOScore generateMOScore(long resourceFreeTime, long expectedDataAvailable, long actionPriority, Implementation impl) {
         long implScore = 0;
         double energy = 0;
         double cost = 0;
         MOProfile p = (MOProfile) this.getProfile(impl);
         if (p != null) {
             implScore = p.getAverageExecutionTime();
-            energy = p.getPower() * implScore;
-            cost = p.getPrice();
+            long waitingTime = Math.max(resourceFreeTime, expectedDataAvailable);
+            if (waitingTime < Long.MAX_VALUE) {
+                energy = ((waitingTime + implScore) * getIdlePower()) + (p.getPower() * implScore);
+                cost = ((waitingTime + implScore) * getIdlePrice()) + (p.getPrice() * implScore);
+            } else {
+                energy = Double.MAX_VALUE;
+                cost = Double.MAX_VALUE;
+            }
         }
         // The data transfer penalty is already included on the datadependency time of the resourceScore
-        long actionPriority = resourceScore.getActionScore();
-        long expectedDataAvailable = ((MOScore) resourceScore).getExpectedDataAvailable();
         return new MOScore(actionPriority, expectedDataAvailable, resourceFreeTime, implScore, energy, cost);
     }
 
@@ -225,9 +256,9 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
         // Block all predecessors
         for (Gap pGap : actionDSI.getPredecessors()) {
             AllocatableAction pred = pGap.getOrigin();
-            if (pred!=null){
-            	MOSchedulingInformation predDSI = (MOSchedulingInformation) pred.getSchedulingInfo();
-            	predDSI.lock();
+            if (pred != null) {
+                MOSchedulingInformation predDSI = (MOSchedulingInformation) pred.getSchedulingInfo();
+                predDSI.lock();
             }
         }
         // Block Action
@@ -236,9 +267,9 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
         if (!actionDSI.isScheduled() || action.getAssignedResource() != this) {
             for (Gap pGap : actionDSI.getPredecessors()) {
                 AllocatableAction pred = pGap.getOrigin();
-                if (pred!=null){
-                	MOSchedulingInformation predDSI = (MOSchedulingInformation) pred.getSchedulingInfo();
-                	predDSI.unlock();
+                if (pred != null) {
+                    MOSchedulingInformation predDSI = (MOSchedulingInformation) pred.getSchedulingInfo();
+                    predDSI.unlock();
                 }
             }
             actionDSI.unscheduled();
@@ -252,13 +283,13 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
         // Remove the scheduling dependency on the predecessor
         for (Gap pGap : actionDSI.getPredecessors()) {
             AllocatableAction pred = pGap.getOrigin();
-            if (pred!=null){
-            	if (!(pred instanceof OptimizationAction)) {
-            		resources.add(new Gap(pGap.getInitialTime(), Long.MAX_VALUE, pred, pGap.getResources().copy(), 0));
-            		unassignedResources.reduceDynamic(pGap.getResources());
-            	}
-            	MOSchedulingInformation predDSI = (MOSchedulingInformation) pred.getSchedulingInfo();
-            	predDSI.removeSuccessor(action);
+            if (pred != null) {
+                if (!(pred instanceof OptimizationAction)) {
+                    resources.add(new Gap(pGap.getInitialTime(), Long.MAX_VALUE, pred, pGap.getResources().copy(), 0));
+                    unassignedResources.reduceDynamic(pGap.getResources());
+                }
+                MOSchedulingInformation predDSI = (MOSchedulingInformation) pred.getSchedulingInfo();
+                predDSI.removeSuccessor(action);
             }
         }
         resources.add(new Gap(Long.MIN_VALUE, Long.MAX_VALUE, null, unassignedResources, 0));
@@ -276,37 +307,40 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
         // For each successor look for the resources
         for (AllocatableAction successor : actionDSI.getSuccessors()) {
             MOSchedulingInformation succDSI = (MOSchedulingInformation) successor.getSchedulingInfo();
-            // Gets the resources that was supose to get from the task and remove the dependency
+            // Gets the resources that was supposed to get from the task and remove the dependency
             Gap toCover = succDSI.removePredecessor(action);
-            ResourceDescription resToCover = toCover.getResources();
+            if (toCover != null) {
+                ResourceDescription resToCover = toCover.getResources();
 
-            // Scans the resources related to the task to cover its requirements
-            Iterator<Gap> gIt = resources.iterator();
-            while (gIt.hasNext()) {
-                Gap availableGap = gIt.next();
-                // Takes the resources from a predecessor,
-                ResourceDescription availableDesc = availableGap.getResources();
-                ResourceDescription usedResources = ResourceDescription.reduceCommonDynamics(availableDesc, resToCover);
+                // Scans the resources related to the task to cover its requirements
+                Iterator<Gap> gIt = resources.iterator();
+                while (gIt.hasNext()) {
+                    Gap availableGap = gIt.next();
+                    // Takes the resources from a predecessor,
+                    ResourceDescription availableDesc = availableGap.getResources();
+                    ResourceDescription usedResources = ResourceDescription.reduceCommonDynamics(availableDesc, resToCover);
 
-                // If it could take some of the resources -> adds a dependency
-                // If all the resources from the predecessor are used -> removes from the list & unlock
-                // If all the resources required for the successor are covered -> move to the next successor
-                if (!usedResources.isDynamicUseless()) {
-                    AllocatableAction availableOrigin = availableGap.getOrigin();
-                    MOSchedulingInformation availableDSI = null;
-                    if (availableOrigin != null) {
-                        availableDSI = (MOSchedulingInformation) availableOrigin.getSchedulingInfo();
-                        availableDSI.addSuccessor(successor);
-                        succDSI.addPredecessor(new Gap(availableGap.getInitialTime(), Long.MAX_VALUE, availableOrigin, usedResources, 0));
-                    }
-                    if (availableDesc.isDynamicUseless()) {
-                        gIt.remove();
-                        if (availableDSI != null) {
-                            availableDSI.unlock();
+                    // If it could take some of the resources -> adds a dependency
+                    // If all the resources from the predecessor are used -> removes from the list & unlock
+                    // If all the resources required for the successor are covered -> move to the next successor
+                    if (!usedResources.isDynamicUseless()) {
+                        AllocatableAction availableOrigin = availableGap.getOrigin();
+                        MOSchedulingInformation availableDSI = null;
+                        if (availableOrigin != null) {
+                            availableDSI = (MOSchedulingInformation) availableOrigin.getSchedulingInfo();
+                            availableDSI.addSuccessor(successor);
+                            succDSI.addPredecessor(
+                                    new Gap(availableGap.getInitialTime(), Long.MAX_VALUE, availableOrigin, usedResources, 0));
                         }
-                    }
-                    if (resToCover.isDynamicUseless()) {
-                        break;
+                        if (availableDesc.isDynamicUseless()) {
+                            gIt.remove();
+                            if (availableDSI != null) {
+                                availableDSI.unlock();
+                            }
+                        }
+                        if (resToCover.isDynamicUseless()) {
+                            break;
+                        }
                     }
                 }
             }
@@ -346,7 +380,7 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
         MOProfile p = (MOProfile) getProfile(impl);
         if (p != null) {
             long length = actionDSI.getExpectedEnd() - (actionDSI.getExpectedStart() < 0 ? 0 : actionDSI.getExpectedStart());
-            pendingActionsCost -= p.getPrice();
+            pendingActionsCost -= p.getPrice() * length;
             pendingActionsEnergy -= p.getPower() * length;
         }
         actionDSI.unlock();
@@ -429,9 +463,9 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
             for (Gap pGap : predecessors) {
                 addGap(pGap);
                 AllocatableAction predecessor = (AllocatableAction) pGap.getOrigin();
-                if (predecessor!=null){
-                	MOSchedulingInformation predDSI = ((MOSchedulingInformation) predecessor.getSchedulingInfo());
-                	predDSI.unlock();
+                if (predecessor != null) {
+                    MOSchedulingInformation predDSI = ((MOSchedulingInformation) predecessor.getSchedulingInfo());
+                    predDSI.unlock();
                 }
             }
             Gap opActionGap = new Gap(0, 0, resourceBlockingAction, action.getAssignedImplementation().getRequirements(), 0);
@@ -455,8 +489,8 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
         // Add dependencies
         // Unlock access to predecessor
         StringBuilder sb = null;
-        if (IS_DEBUG){
-        	sb = new StringBuilder("Predecessors: ");
+        if (IS_DEBUG) {
+            sb = new StringBuilder("Predecessors: ");
         }
         for (Gap pGap : predecessors) {
             AllocatableAction predecessor = pGap.getOrigin();
@@ -470,17 +504,17 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
                 predDSI.unlock();
             }
             schedInfo.addPredecessor(pGap);
-            if (IS_DEBUG){
-            	sb.append(pGap.getOrigin()).append(" with ").append(pGap.getResources().getDynamicDescription()).append(", ");
+            if (IS_DEBUG) {
+                sb.append(pGap.getOrigin()).append(" with ").append(pGap.getResources().getDynamicDescription()).append(", ");
             }
         }
-       
+
         // Compute end time
         schedInfo.setExpectedStart(expectedStart);
         long expectedEnd = expectedStart;
         if (p != null) {
             expectedEnd += p.getAverageExecutionTime();
-            pendingActionsCost += p.getPrice();
+            pendingActionsCost += p.getPrice() * p.getAverageExecutionTime();
             pendingActionsEnergy += p.getPower() * p.getAverageExecutionTime();
         }
         schedInfo.setExpectedEnd(expectedEnd);
@@ -491,9 +525,9 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
         } else {
             addGap(new Gap(Long.MAX_VALUE, Long.MAX_VALUE, action, impl.getRequirements().copy(), 0));
         }
-        if (IS_DEBUG){
-        	LOGGER.debug(LOG_PREFIX +"Scheduled " + action.toString() + ". Interval [ "+expectedStart+" - "+ expectedEnd + 
-        			"] "+ sb.toString());
+        if (IS_DEBUG) {
+            LOGGER.debug(LOG_PREFIX + "Scheduled " + action.toString() + ". Interval [ " + expectedStart + " - " + expectedEnd + "] "
+                    + sb.toString());
         }
     }
 
@@ -519,7 +553,7 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
     @SuppressWarnings("unchecked")
     public PriorityQueue<AllocatableAction> localOptimization(long updateId, Comparator<AllocatableAction> selectionComparator,
             Comparator<AllocatableAction> donorComparator) {
-    	// System.out.println("Local Optimization for " + this.getName() + " starts");
+        // System.out.println("Local Optimization for " + this.getName() + " starts");
         LocalOptimizationState state = new LocalOptimizationState(updateId, (MOResourceScheduler<WorkerResourceDescription>) this,
                 getReadyComparator(), selectionComparator);
         PriorityQueue<AllocatableAction> actions = new PriorityQueue<AllocatableAction>(1, donorComparator);
@@ -545,52 +579,34 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
         classifyPendingUnschedulings(state);
 
         // ClassifyActions
-        LOGGER.debug(LOG_PREFIX +"Reschedule pending actions");
+        LOGGER.debug(LOG_PREFIX + "Reschedule pending actions");
         List<Gap> newGaps = rescheduleTasks(state, actions);
-        //Ensuring there are no locked actions after rescheduling
-        for (AllocatableAction action: lockedActions){
-        	MOSchedulingInformation actionDSI = (MOSchedulingInformation) action.getSchedulingInfo();
-        	try{
-            	actionDSI.unlock();
-            }catch (IllegalMonitorStateException e){
-            	LOGGER.debug(LOG_PREFIX +"Illegal Monitor Exception when releasing locked actions. Ignoring...");
+        // Ensuring there are no locked actions after rescheduling
+        for (AllocatableAction action : lockedActions) {
+            MOSchedulingInformation actionDSI = (MOSchedulingInformation) action.getSchedulingInfo();
+            try {
+                actionDSI.unlock();
+            } catch (IllegalMonitorStateException e) {
+                LOGGER.debug(LOG_PREFIX + "Illegal Monitor Exception when releasing locked actions. Ignoring...");
             }
         }
-		/*System.out.println("\t is running: ");
-		for (AllocatableAction aa : state.getRunningActions()) {
-			System.out.println("\t\t" + aa	+ " with implementation "
-					+ ((aa.getAssignedImplementation() == null) ? "null" : aa
-							.getAssignedImplementation().getImplementationId())
-					+ " started " + ((aa.getStartTime() == null) ? "-" : (System
-							.currentTimeMillis() - aa.getStartTime())));
-
-		}
-		
-		System.out.println(this.getName() + " has no resources for: ");
-		for (AllocatableAction aa : this.resourceBlockingAction
-				.getDataSuccessors()) {
-			System.out
-					.println("\t"
-							+ aa
-							+ " with"
-							+ " implementation "
-							+ ((aa.getAssignedImplementation() == null) ? "null"
-									: aa.getAssignedImplementation()
-											.getImplementationId()));
-		}
-		System.out
-				.println(this.getName()
-						+ " will wait for data producers to be rescheduled for actions:");
-		for (AllocatableAction aa : this.dataBlockingAction.getDataSuccessors()) {
-			System.out
-					.println("\t"
-							+ aa
-							+ " with"
-							+ " implementation "
-							+ ((aa.getAssignedImplementation() == null) ? "null"
-									: aa.getAssignedImplementation()
-											.getImplementationId()));
-		}*/
+        /*
+         * System.out.println("\t is running: "); for (AllocatableAction aa : state.getRunningActions()) {
+         * System.out.println("\t\t" + aa + " with implementation " + ((aa.getAssignedImplementation() == null) ? "null"
+         * : aa .getAssignedImplementation().getImplementationId()) + " started " + ((aa.getStartTime() == null) ? "-" :
+         * (System .currentTimeMillis() - aa.getStartTime())));
+         * 
+         * }
+         * 
+         * System.out.println(this.getName() + " has no resources for: "); for (AllocatableAction aa :
+         * this.resourceBlockingAction .getDataSuccessors()) { System.out .println("\t" + aa + " with" +
+         * " implementation " + ((aa.getAssignedImplementation() == null) ? "null" : aa.getAssignedImplementation()
+         * .getImplementationId())); } System.out .println(this.getName() +
+         * " will wait for data producers to be rescheduled for actions:"); for (AllocatableAction aa :
+         * this.dataBlockingAction.getDataSuccessors()) { System.out .println("\t" + aa + " with" + " implementation " +
+         * ((aa.getAssignedImplementation() == null) ? "null" : aa.getAssignedImplementation() .getImplementationId()));
+         * }
+         */
 
         // Schedules all the pending scheduligns and unblocks the scheduling of new actions
         LOGGER.debug(LOG_PREFIX + "Manage new gaps");
@@ -639,42 +655,43 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
             dsi.setOnOptimization(true);
             actions.add(gapAction);
         }
-        LinkedList<AllocatableAction> modified= new LinkedList<>();
-        while(true){
-        	try{
-        		for (Gap g : gaps) {
-        			AllocatableAction gapAction = g.getOrigin();
-        			if (gapAction != null) {
-        				MOSchedulingInformation dsi = (MOSchedulingInformation) gapAction.getSchedulingInfo();
-        				dsi.lock();
-        				dsi.setOnOptimization(true);
-        				modified.add(gapAction);
-        			}
-        		}
-        		break;
-        	}catch(ConcurrentModificationException cme){
-        		for ( AllocatableAction action: modified){
-        			MOSchedulingInformation dsi = (MOSchedulingInformation) action.getSchedulingInfo();
-        			dsi.setOnOptimization(false);
-        			dsi.unlock();
-        		}
-        		modified.clear();
-        	}
+        LinkedList<AllocatableAction> modified = new LinkedList<>();
+        while (true) {
+            try {
+                for (Gap g : gaps) {
+                    AllocatableAction gapAction = g.getOrigin();
+                    if (gapAction != null) {
+                        MOSchedulingInformation dsi = (MOSchedulingInformation) gapAction.getSchedulingInfo();
+                        dsi.lock();
+                        dsi.setOnOptimization(true);
+                        modified.add(gapAction);
+                    }
+                }
+                break;
+            } catch (ConcurrentModificationException cme) {
+                for (AllocatableAction action : modified) {
+                    MOSchedulingInformation dsi = (MOSchedulingInformation) action.getSchedulingInfo();
+                    dsi.setOnOptimization(false);
+                    dsi.unlock();
+                }
+                modified.clear();
+            }
         }
         actions.addAll(modified);
 
         AllocatableAction action;
         while ((action = actions.poll()) != null) {
             MOSchedulingInformation actionDSI = (MOSchedulingInformation) action.getSchedulingInfo();
-            //System.out.println(" ** Evaluating Action "+ action + " with SI: "+ actionDSI.hashCode());
+            // System.out.println(" ** Evaluating Action "+ action + " with SI: "+ actionDSI.hashCode());
             if (!actionDSI.isScheduled()) {
-                try{
-                	actionDSI.unlock();
-                }catch (IllegalMonitorStateException e){
-                	LOGGER.debug(LOG_PREFIX +"Illegal Monitor Exception scaning actions. Ignoring...");
+                try {
+                    actionDSI.unlock();
+                } catch (IllegalMonitorStateException e) {
+                    LOGGER.debug(LOG_PREFIX + "Illegal Monitor Exception scaning actions. Ignoring...");
                 }
                 // Task was already executed. Ignore
-                //System.out.println(" ** End Action "+ action + " with SI: "+ actionDSI.hashCode()+ " because not scheduled ");
+                // System.out.println(" ** End Action "+ action + " with SI: "+ actionDSI.hashCode()+ " because not
+                // scheduled ");
                 continue;
             }
 
@@ -682,35 +699,35 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
             boolean hasInternal = false;
             boolean hasExternal = false;
             long startTime = 0;
-            while(true){
-            	List<MOSchedulingInformation> managedDSIs = new LinkedList<>();
-            	try {
-            		List<AllocatableAction> dPreds = action.getDataPredecessors();
-            		for (AllocatableAction dPred : dPreds) {
-            			MOSchedulingInformation dPredDSI = (MOSchedulingInformation) dPred.getSchedulingInfo();
-            			if (dPred.getAssignedResource() == this) {
-            				if (dPredDSI.tryToLock()) {
-            					if (dPredDSI.isScheduled()) {
-            						hasInternal = true;
-            						dPredDSI.addOptimizingSuccessor(action);
-            						managedDSIs.add(dPredDSI);
-            					}
-            					dPredDSI.unlock();
-            				}
-            				// else
-            				// The predecessor is trying to be unscheduled but it is
-            				// blocked by another successor reschedule.
-            			} else {
-            				hasExternal = true;
-            				startTime = Math.max(startTime, dPredDSI.getExpectedEnd());
-            			}
-            		}
-            		break;
-            	} catch (ConcurrentModificationException cme) {
-            		for (MOSchedulingInformation dsi: managedDSIs){
-            			dsi.removeOptimizingSuccessor(action);
-            		}
-            	}
+            while (true) {
+                List<MOSchedulingInformation> managedDSIs = new LinkedList<>();
+                try {
+                    List<AllocatableAction> dPreds = action.getDataPredecessors();
+                    for (AllocatableAction dPred : dPreds) {
+                        MOSchedulingInformation dPredDSI = (MOSchedulingInformation) dPred.getSchedulingInfo();
+                        if (dPred.getAssignedResource() == this) {
+                            if (dPredDSI.tryToLock()) {
+                                if (dPredDSI.isScheduled()) {
+                                    hasInternal = true;
+                                    dPredDSI.addOptimizingSuccessor(action);
+                                    managedDSIs.add(dPredDSI);
+                                }
+                                dPredDSI.unlock();
+                            }
+                            // else
+                            // The predecessor is trying to be unscheduled but it is
+                            // blocked by another successor reschedule.
+                        } else {
+                            hasExternal = true;
+                            startTime = Math.max(startTime, dPredDSI.getExpectedEnd());
+                        }
+                    }
+                    break;
+                } catch (ConcurrentModificationException cme) {
+                    for (MOSchedulingInformation dsi : managedDSIs) {
+                        dsi.removeOptimizingSuccessor(action);
+                    }
+                }
             }
             // Resource Dependencies analysis
             boolean hasResourcePredecessors = false;
@@ -737,15 +754,15 @@ public class MOResourceScheduler<T extends WorkerResourceDescription> extends Re
             }
             actionDSI.setExpectedStart(startTime);
             actionDSI.setToReschedule(true);
-            //System.out.println(" ** Classifiying Action "+ action + " with SI: "+ actionDSI.hashCode());
+            // System.out.println(" ** Classifiying Action "+ action + " with SI: "+ actionDSI.hashCode());
             state.classifyAction(action, hasInternal, hasExternal, hasResourcePredecessors, startTime);
             if (hasResourcePredecessors || hasInternal) {
                 // The action has a blocked predecessor in the resource that will block its execution
-            	actionDSI.unlock();
-            }else{
-            	pendingToUnlockActions.add(action);
+                actionDSI.unlock();
+            } else {
+                pendingToUnlockActions.add(action);
             }
-            //System.out.println(" ** END evaluation Action "+ action + " with SI: "+ actionDSI.hashCode());
+            // System.out.println(" ** END evaluation Action "+ action + " with SI: "+ actionDSI.hashCode());
         }
         return pendingToUnlockActions;
     }

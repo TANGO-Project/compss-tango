@@ -41,7 +41,7 @@ ERROR_WORKER_IN_MASTER_MEMORY_TOO_HIGH="Parameter worker_in_master_memory exceed
 ERROR_WORKER_IN_MASTER_MEMORY_NOT_SPECIFIED="Parameter worker_in_master_memory is mandatory if worker_in_master_cpus is not 0"
 ERROR_PROLOG_ACTION="Exception executing prolog action"
 ERROR_EPILOG_ACTION="Exception executing epilog action"
-
+ERROR_LANGUAGE="Value of option --lang must be: java, c or python"
 
 #---------------------------------------------------------------------------------------
 # HELPER FUNCTIONS
@@ -182,10 +182,48 @@ action_error() {
 }
 
 ###############################################
+# Infers the language from the Application Path
+# WARN: Sets global lang variable
+###############################################
+infer_language() {
+  local fullApp
+  local fileName
+  local extension
+  local isPython
+  local isPythonCompiled
+  local isC
+
+  fullApp=$1
+  fileName=$(basename "$fullApp")
+  extension=${fileName##*.}
+  if [ "$extension" == "py" ] || [ "$extension" == "pyc" ]; then
+    echo "[  INFO] Inferred PYTHON language"
+    lang=python
+  else
+    # Try to infer language by file command
+    isPython=$(file "$fullAppPath" | grep "Python" | cat)
+    isPythonCompiled=$(file "$fullAppPath" | grep "python" | cat)
+    isC=$(file "$fullAppPath" | grep "executable" | cat)
+    if [ -n "$isPython" ] || [ -n "$isPythonCompiled" ]; then
+      echo "[  INFO] Inferred PYTHON language"
+      lang=python
+    elif [ -n "$isC" ]; then
+      echo "[  INFO] Inferred C/C++ language"
+      lang=c
+    else
+      # Lang cannot be infered or it's the default JAVA
+      echo "[  INFO] Using default language: ${DEFAULT_LANGUAGE}"
+      lang=${DEFAULT_LANGUAGE}
+    fi
+  fi
+}
+
+###############################################
 # Loads the tracing environment
 ###############################################
 load_tracing_env() {
-  local module_tmp=$(mktemp)
+  local module_tmp
+  module_tmp=$(mktemp)
   module list 2> "${module_tmp}"
 
   # Look for openmpi / impi / none
@@ -504,20 +542,20 @@ get_args() {
 	  args_pass="$args_pass --conn=es.bsc.compss.connectors.DefaultNoSSHConnector"
           ;;
         queue=*)
-          #Added for elasticity
-          queue=$(echo $OPTARG | sed -e 's/queue=//g')
+          # Added for elasticity
+          queue=${OPTARG//queue=/}
           ;;
         reservation=*)
-          #Added for elasticity
-          reservation=$(echo $OPTARG | sed -e 's/reservation=//g')
+          # Added for elasticity
+          reservation=${OPTARG//reservation=/}
           ;;
         qos=*)
-          #Added for elasticity
-          qos=$(echo $OPTARG | sed -e 's/qos=//g')
+          # Added for elasticity
+          qos=${OPTARG//qos=/}
           ;;
         constraints=*)
           #Added for elasticity
-          constraints=$(echo $OPTARG | sed -e 's/constraints=//g')
+          constraints=${OPTARG//constraints=/}
           ;;
 	*)
           # Flag didn't match any patern. Add to COMPSs 
@@ -534,6 +572,9 @@ get_args() {
   
   # Shift COMPSs arguments
   shift $((OPTIND-1))
+
+  # Wrap full app path for lang inference 
+  fullAppPath=$1
 
   # Pass application name and args
   args_pass="$args_pass $@" 
@@ -719,7 +760,16 @@ check_args() {
   ###############################################################
   # Lang
   if [ -z "$lang" ]; then
-    lang=${DEFAULT_LANGUAGE}
+    # Try to infer language
+    infer_language $fullAppPath
+  elif [ "$lang" = "java" ]; then
+    lang=java
+  elif [ "$lang" = "c" ]; then
+    lang=c
+  elif [ "$lang" = "python" ]; then
+    lang=python
+  else
+    display_error "${ERROR_LANGUAGE}"
   fi
 
   # Library path
@@ -891,7 +941,8 @@ log_variables() {
 ###############################################
 create_xml_files() {
   # Resources.xml and project.xml filenames
-  local sec=$(date +%s)
+  local sec
+  sec=$(date +%s)
   RESOURCES_FILE=${worker_working_dir}/resources_$sec.xml
   PROJECT_FILE=${worker_working_dir}/project_mn_$sec.xml
 
@@ -938,8 +989,10 @@ launch() {
     local hostid=1
     if [ "${worker_in_master_cpus}" -ne 0 ]; then
       # Worker in master node
-      local jvm_worker_in_master_opts_str=$(echo "${jvm_worker_in_master_opts}" | tr "," " ")
-      local jvm_worker_in_master_opts_size=$(echo "${jvm_worker_in_master_opts_str}" | wc -w)
+      local jvm_worker_in_master_opts_str
+      local jvm_worker_in_master_opts_size
+      jvm_worker_in_master_opts_str=$(echo "${jvm_worker_in_master_opts}" | tr "," " ")
+      jvm_worker_in_master_opts_size=$(echo "${jvm_worker_in_master_opts_str}" | wc -w)
       # worker_cmd id name jvmOptsSize jvmOpts cpus gpus cpuMap gpuMap lot
       worker_cmd $hostid "${master_node}${network}" "${jvm_worker_in_master_opts_size}" "${jvm_worker_in_master_opts_str}" "${worker_in_master_cpus}" "${gpus_per_node}" "${cpu_affinity}" "${gpu_affinity}" "${max_tasks_per_node}"
       WCMD="${LAUNCH_CMD} ${LAUNCH_PARAMS}${LAUNCH_SEPARATOR}${master_node} ${WCMD}"
@@ -948,8 +1001,10 @@ launch() {
       hostid=$((hostid+1))
     fi
 
-    local jvm_workers_opts_str=$(echo "${jvm_workers_opts}" | tr "," " ")
-    local jvm_workers_opts_size=$(echo "${jvm_workers_opts_str}" | wc -w)
+    local jvm_workers_opts_str
+    local jvm_workers_opts_size
+    jvm_workers_opts_str=$(echo "${jvm_workers_opts}" | tr "," " ")
+    jvm_workers_opts_size=$(echo "${jvm_workers_opts_str}" | wc -w)
     if [ ! -z "${worker_nodes}" ]; then
       for node in ${worker_nodes}; do
         # worker_cmd id name jvmOptsSize jvmOpts cpus gpus cpuMap gpuMap lot
@@ -1111,8 +1166,11 @@ insert_xml_elasticity() {
   local gpus=$3
   local lot=$4
   local memory=$5
-  local jvm_workers_opts_str=$(echo "${jvm_workers_opts}" | tr "," " ")
-  local jvm_workers_opts_size=$(echo "${jvm_workers_opts_str}" | wc -w)
+  local jvm_workers_opts_str
+  local jvm_workers_opts_size
+  jvm_workers_opts_str=$(echo "${jvm_workers_opts}" | tr "," " ")
+  jvm_workers_opts_size=$(echo "${jvm_workers_opts_str}" | wc -w)
+
   cat >> "${RESOURCES_FILE}" << EOT
    <CloudProvider Name="SLURM-Cluster">
         <Endpoint>

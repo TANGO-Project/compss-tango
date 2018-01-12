@@ -173,12 +173,6 @@ public class NIOTracer extends Tracer {
 
         // Stopping Extrae
         synchronized (Tracer.class) {
-        	try {
-                Thread.sleep(50);
-        	} catch (InterruptedException e) {
-                //Nothing to do
-        	}
-
             LOGGER.debug("[NIOTracer] Disabling pthreads");
             Wrapper.SetOptions(Wrapper.EXTRAE_ENABLE_ALL_OPTIONS & ~Wrapper.EXTRAE_PTHREAD_OPTION);
 

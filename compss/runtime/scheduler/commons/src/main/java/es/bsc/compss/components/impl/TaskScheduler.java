@@ -34,10 +34,12 @@ import es.bsc.compss.scheduler.types.WorkloadState;
 import es.bsc.compss.scheduler.types.allocatableactions.ReduceWorkerAction;
 import es.bsc.compss.scheduler.types.allocatableactions.StartWorkerAction;
 import es.bsc.compss.scheduler.types.allocatableactions.StopWorkerAction;
+import es.bsc.compss.types.CloudProvider;
 import es.bsc.compss.types.implementations.Implementation;
 import es.bsc.compss.types.resources.CloudMethodWorker;
 import es.bsc.compss.types.resources.Worker;
 import es.bsc.compss.types.resources.WorkerResourceDescription;
+import es.bsc.compss.types.resources.description.CloudInstanceTypeDescription;
 import es.bsc.compss.types.resources.description.CloudMethodResourceDescription;
 import es.bsc.compss.types.resources.updates.ResourceUpdate;
 import es.bsc.compss.util.ActionSet;
@@ -1201,6 +1203,17 @@ public class TaskScheduler {
     public boolean isExternalAdaptationEnabled(){
     	return externalAdaptation;
     }
+    
+    public JSONObject getJSONForCloudInstanceTypeDescription(CloudProvider cp, CloudInstanceTypeDescription ctid) {
+        return jsm.getJSONForCloudInstanceTypeDescription(cp, ctid);
+    }
+    
+    public JSONObject getJSONForImplementations(){
+    	return jsm.getJSONForImplementations();
+    }
+    /*public Profile getDefaultProfile(CloudProvider cp, CloudInstanceTypeDescription ctid, int coreId, int implId) {
+        return generateProfile(jsm.getJSONForImplementation(cp, ctid, coreId, implId));
+    }*/
 
     private class WorkersMap {
 

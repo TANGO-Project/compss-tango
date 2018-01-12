@@ -53,7 +53,7 @@ public class PythonThreadPool extends ExternalThreadPool {
      * 
      * @param nw
      * @param size
-     * @throws IOException 
+     * @throws IOException
      */
     public PythonThreadPool(NIOWorker nw, int size) {
         super(nw, size);

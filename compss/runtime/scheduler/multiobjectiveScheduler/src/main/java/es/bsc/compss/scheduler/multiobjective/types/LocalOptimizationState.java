@@ -263,9 +263,8 @@ public class LocalOptimizationState {
             if (impl.getCoreId() != null && impl.getImplementationId() != null) {
                 runningImplementationsCount[impl.getCoreId()][impl.getImplementationId()]++;
                 endRunningActions = Math.max(endRunningActions, pendingTime);
-                double power = p.getPower();
-                runningEnergy += pendingTime * power;
-                runningCost += p.getPrice();
+                runningEnergy += p.getPower() * pendingTime;
+                runningCost += p.getPrice() * pendingTime;
             }
         } else {
             LOGGER.debug(LOG_PREFIX + "Action has a null implementation. Nothing done for reserving resources ***");
@@ -484,7 +483,7 @@ public class LocalOptimizationState {
             long length = dsi.getExpectedEnd() - (dsi.getExpectedStart() < 0 ? 0 : dsi.getExpectedStart());
             implementationCount[impl.getCoreId()][impl.getImplementationId()]++;
             totalEnergy += p.getPower() * length;
-            totalCost += p.getPrice();
+            totalCost += p.getPrice()* length;
         }
     }
 

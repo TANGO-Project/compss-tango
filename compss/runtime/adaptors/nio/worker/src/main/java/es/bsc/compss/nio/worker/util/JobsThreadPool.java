@@ -60,9 +60,14 @@ public abstract class JobsThreadPool {
         this.nw = nw;
         this.size = size;
 
+        // Instantiate worker thread structure
         this.workerThreads = new Thread[this.size];
-        this.queue = new RequestQueue<>();
 
+        // Make system properties local to each thread
+        System.setProperties(new ThreadProperties(System.getProperties()));
+
+        // Instantiate the message queue and the stop semaphore
+        this.queue = new RequestQueue<>();
         this.sem = new Semaphore(size);
     }
 
@@ -109,25 +114,24 @@ public abstract class JobsThreadPool {
         LOGGER.info("ThreadPool stopped");
     }
 
-    private void joinThreads() {
-    	for (Thread t : workerThreads) {
-    		if (t!=null){
-    			try {
-					t.join();
-				} catch (InterruptedException e) {
-					//Nothing to do
-				}
-    		}
-    	}
-    	workerThreads=null;
-		
-	}
-
-	/**
+    /**
      * Stops specific language components
      * 
      */
     protected abstract void specificStop();
+
+    private void joinThreads() {
+        for (Thread t : this.workerThreads) {
+            if (t != null) {
+                try {
+                    t.join();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        this.workerThreads = null;
+    }
 
     /**
      * Notifies that one of the threads as completed an action required by the Threadpool (start or stop)

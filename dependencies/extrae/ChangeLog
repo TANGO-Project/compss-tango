@@ -1,6 +1,10 @@
 
 ChangeLog
  [ + added, - removed, * changed ]
+ * 09Jan2018 Added mutex to protect buffers' double frees from dying pthreads
+ * 27Oct2017 No longer set a value for OMP_NUM_THREADS if it was not defined by the user to avoid conflicts with schedulers that assign threads through omp_set_num_threads
+ + 26Oct2017 Added header file extrae_version.h
+ * 25Oct2017 Fixes compatibility issue accessing struct ucontext
  * 16Oct2017 Reduces maximum number of arguments in intel-kmpc wrappers
  + 13Oct2017 Added fallback mechanism for taskloop instrumentation that recovers from runtime internal copies of the instrumented parameters
  * 10Oct2017 Changes RECHECK_INIT macro so it also allocates nested helpers

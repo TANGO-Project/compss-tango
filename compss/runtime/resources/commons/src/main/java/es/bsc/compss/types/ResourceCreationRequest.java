@@ -28,14 +28,20 @@ public class ResourceCreationRequest {
     private final CloudProvider provider;
     private final CloudMethodResourceDescription requested;
     private int[][] requestedSimultaneousTaskCount;
+    private final long requestedTime;
 
     public ResourceCreationRequest(CloudMethodResourceDescription requestedResource, int[][] simultaneousTasks, CloudProvider cp) {
         requested = requestedResource;
         this.provider = cp;
         requestedSimultaneousTaskCount = simultaneousTasks;
+        requestedTime = System.currentTimeMillis();
     }
 
-    public int[][] requestedSimultaneousTaskCount() {
+    public long getRequestedTime() {
+		return requestedTime;
+	}
+
+	public int[][] requestedSimultaneousTaskCount() {
         return requestedSimultaneousTaskCount;
     }
 

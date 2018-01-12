@@ -38,9 +38,12 @@ public class Processor implements Serializable {
     private float internalMemory = MethodResourceDescription.UNASSIGNED_FLOAT;
 	private String propName = MethodResourceDescription.UNASSIGNED_STR;
     private String propValue = MethodResourceDescription.UNASSIGNED_STR;
-
+    
+    //This flag is to know if a processor has been created by default and not updated
+    private boolean modified = false;
 
     public Processor() {
+    	
     }
 
     public Processor(String name) {
@@ -101,7 +104,8 @@ public class Processor implements Serializable {
     }
 
     public void setName(String name) {
-        this.name = name;
+        modified = true;
+    	this.name = name;
     }
 
     public int getComputingUnits() {
@@ -109,7 +113,8 @@ public class Processor implements Serializable {
     }
 
     public void setComputingUnits(int computingUnits) {
-        this.computingUnits = computingUnits;
+    	modified = true;
+    	this.computingUnits = computingUnits;
     }
 
     public void addComputingUnits(int cu) {
@@ -117,7 +122,8 @@ public class Processor implements Serializable {
     }
 
     public void removeComputingUnits(int cu) {
-        this.computingUnits = this.computingUnits - cu;
+    	modified = true;
+    	this.computingUnits = this.computingUnits - cu;
     }
 
     public void multiply(int amount) {
@@ -129,7 +135,8 @@ public class Processor implements Serializable {
     }
 
     public void setSpeed(float speed) {
-        this.speed = speed;
+    	modified = true;
+    	this.speed = speed;
     }
 
     public String getArchitecture() {
@@ -137,7 +144,8 @@ public class Processor implements Serializable {
     }
 
     public void setArchitecture(String architecture) {
-        this.architecture = architecture;
+    	modified = true;
+    	this.architecture = architecture;
     }
     
     /**
@@ -151,6 +159,7 @@ public class Processor implements Serializable {
 	 * @param type the type to set
 	 */
 	public void setType(String type) {
+		modified = true;
 		this.type = type;
 	}
 
@@ -165,6 +174,7 @@ public class Processor implements Serializable {
 	 * @param internalMemory the internalMemory to set
 	 */
 	public void setInternalMemory(float internalMemory) {
+		modified = true;
 		this.internalMemory = internalMemory;
 	}
 
@@ -173,7 +183,8 @@ public class Processor implements Serializable {
     }
 
     public void setPropName(String propName) {
-        this.propName = propName;
+    	modified = true;
+    	this.propName = propName;
     }
 
     public String getPropValue() {
@@ -184,4 +195,11 @@ public class Processor implements Serializable {
         this.propValue = propValue;
     }
 
+	public boolean isCPU() {
+		return type.equals(Constants.CPU_TYPE);
+	}
+	
+	public boolean isModified() {
+		return modified;
+	}
 }

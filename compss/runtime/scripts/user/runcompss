@@ -574,6 +574,44 @@ get_args() {
   application_args=$*
 }
 
+###############################################
+# Infers the language from the Application Path
+# WARN: Sets global lang variable
+###############################################
+infer_language() {
+  local fullApp
+  local fileName
+  local extension
+  local isPython
+  local isPythonCompiled
+  local isC
+
+  fullApp=$1                                                                                                                                                                                                                                                                 
+
+  fileName=$(basename "$fullApp")
+  extension=${fileName##*.}
+  if [ "$extension" == "py" ] || [ "$extension" == "pyc" ]; then
+    echo "[  INFO] Inferred PYTHON language"
+    lang=python
+  else
+    # Try to infer language by file command
+    isPython=$(file "$fullAppPath" | grep "Python" | cat)
+    isPythonCompiled=$(file "$fullAppPath" | grep "python" | cat)
+    isC=$(file "$fullAppPath" | grep "executable" | cat)
+    if [ -n "$isPython" ] || [ -n "$isPythonCompiled" ]; then
+      echo "[  INFO] Inferred PYTHON language"
+      lang=python
+    elif [ -n "$isC" ]; then
+      echo "[  INFO] Inferred C/C++ language"
+      lang=c
+    else
+      # Lang cannot be infered or it's the default JAVA
+      echo "[  INFO] Using default language: ${DEFAULT_LANGUAGE}"
+      lang=${DEFAULT_LANGUAGE}
+    fi
+  fi
+}
+
 check_args() {
   if [ -z "${taskExecution}" ]; then
     echo "[  INFO] Using default execution type: ${DEFAULT_TASK_EXECUTION}"
@@ -595,29 +633,8 @@ check_args() {
   fi
 
   if [ -z "$lang" ]; then
-    # Try to infer language by extension
-    fileName=$(basename "$fullAppPath")
-    extension=${fileName##*.}
-    if [ "$extension" == "py" ] || [ "$extension" == "pyc" ]; then
-      echo "[  INFO] Inferred PYTHON language"
-      lang=python
-    else
-      # Try to infer language by file command
-      isPython=$(file "$fullAppPath" | grep "Python" | cat)
-      isPythonCompiled=$(file "$fullAppPath" | grep "python" | cat)
-      isC=$(file "$fullAppPath" | grep "executable" | cat)
-      if [ -n "$isPython" ] || [ -n "$isPythonCompiled" ]; then
-        echo "[  INFO] Inferred PYTHON language"
-        lang=python
-      elif [ -n "$isC" ]; then
-        echo "[  INFO] Inferred C/C++ language"
-        lang=c
-      else
-        # Lang cannot be infered or it's the default JAVA
-        echo "[  INFO] Using default language: ${DEFAULT_LANGUAGE}"
-        lang=${DEFAULT_LANGUAGE}
-      fi
-    fi
+    # Try to infer language
+    infer_language "$fullAppPath"
   elif [ "$lang" = "java" ]; then
     lang=java
   elif [ "$lang" = "c" ]; then
@@ -711,8 +728,8 @@ check_args() {
   # Classpath
   if [ -z "$cp" ]; then
     cp=${DEFAULT_CLASSPATH}
-    for jar in $(ls "${DEFAULT_CLASSPATH}" | grep *.jar); do
-       cp=$cp:${DEFAULT_CLASSPATH}/$jar
+    for jar in "${DEFAULT_CLASSPATH}"/*.jar; do
+       cp=$cp:$jar
     done
   else
     fcp=""
@@ -913,8 +930,10 @@ EOT
 
 exec_java() {
   # Define command
-  local java_opts=$(cat "${jvm_options_file}" | tr '\n' ' ')
-  local JAVACMD=$JAVA" ${java_opts}"
+  local java_opts
+  local JAVACMD
+  java_opts=$(cat "${jvm_options_file}" | tr '\n' ' ')
+  JAVACMD=$JAVA" ${java_opts}"
 
   if [ $tracing -gt 0 ]; then
     export LD_PRELOAD=${EXTRAE_LIB}/libpttrace.so

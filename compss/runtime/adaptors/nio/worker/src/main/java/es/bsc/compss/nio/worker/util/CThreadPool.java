@@ -46,7 +46,7 @@ public class CThreadPool extends ExternalThreadPool {
     // C worker relative path
     private static final String C_PIPER = "c_piper.sh";
     private static final String PERSISTENT_WORKER_C = "/worker/persistent_worker_c";
-    private static final String LOG_PREFIX="[CThreadPool] ";
+    private static final String LOG_PREFIX = "[CThreadPool] ";
     public static final int MAX_RETRIES = 3;
 
 
@@ -67,7 +67,7 @@ public class CThreadPool extends ExternalThreadPool {
      */
     @Override
     public void startThreads() throws InitializationException {
-        LOGGER.info(LOG_PREFIX+ "Start threads for C-binding");
+        LOGGER.info(LOG_PREFIX + "Start threads for C-binding");
         int i = 0;
         for (Thread t : workerThreads) {
             CExecutor executor = new CExecutor(nw, this, queue, writePipeFiles[i], taskResultReader[i]);
@@ -77,7 +77,7 @@ public class CThreadPool extends ExternalThreadPool {
             i = i + 1;
         }
         sem.acquireUninterruptibly(this.size);
-        LOGGER.debug(LOG_PREFIX+"Finished C ThreadPool");
+        LOGGER.debug(LOG_PREFIX + "Finished C ThreadPool");
     }
 
     @Override
@@ -93,15 +93,15 @@ public class CThreadPool extends ExternalThreadPool {
             // Persistent version
 
             if (nw.getAppDir() != null && !nw.getAppDir().isEmpty()) {
-            	String nx_args = "--enable-block";
-            	String compss_nx_args;
-            	if ((compss_nx_args = System.getenv("COMPSS_NX_ARGS")) != null){
-            		nx_args=nx_args.concat(" "+compss_nx_args);
-            	}
-            	if (LOGGER.isDebugEnabled()){
-            		nx_args=nx_args.concat(" --summary --verbose");
-            	}
-                cmd.append("NX_ARGS='"+ nx_args+"' ").append(nw.getAppDir()).append(PERSISTENT_WORKER_C)
+                String nx_args = "--enable-block";
+                String compss_nx_args;
+                if ((compss_nx_args = System.getenv("COMPSS_NX_ARGS")) != null) {
+                    nx_args = nx_args.concat(" " + compss_nx_args);
+                }
+                if (LOGGER.isDebugEnabled()) {
+                    nx_args = nx_args.concat(" --summary --verbose");
+                }
+                cmd.append("NX_ARGS='" + nx_args + "' ").append(nw.getAppDir()).append(PERSISTENT_WORKER_C)
                         .append(ExternalExecutor.TOKEN_SEP);
                 // Adding Data pipes in the case of persistent worker
                 cmd.append(writeDataPipeFile).append(ExternalExecutor.TOKEN_SEP).append(readDataPipeFile)
@@ -132,23 +132,23 @@ public class CThreadPool extends ExternalThreadPool {
 
     @Override
     public void removeExternalData(String dataID) {
-    	 /*
-         * MANAGEMENT OF EXTERNAL DATA REMOVE: Send external data removals requests with data id through the data PIPE to
-         * remove data in the persistent worker cache.
+        /*
+         * MANAGEMENT OF EXTERNAL DATA REMOVE: Send external data removals requests with data id through the data PIPE
+         * to remove data in the persistent worker cache.
          */
-    	
-    	String cmd = ExternalExecutor.REMOVE_TAG + ExternalExecutor.TOKEN_SEP + dataID + ExternalExecutor.TOKEN_NEW_LINE;
+
+        String cmd = ExternalExecutor.REMOVE_TAG + ExternalExecutor.TOKEN_SEP + dataID + ExternalExecutor.TOKEN_NEW_LINE;
         boolean done = false;
         int retries = 0;
         while (!done && retries < MAX_RETRIES) {
-            LOGGER.debug(LOG_PREFIX+"Trying to remove data "+ dataID);
+            LOGGER.debug(LOG_PREFIX + "Trying to remove data " + dataID);
             try (FileOutputStream output = new FileOutputStream(writeDataPipeFile, true);) {
                 output.write(cmd.getBytes());
                 output.flush();
                 output.close();
                 done = true;
             } catch (Exception e) {
-                LOGGER.warn(LOG_PREFIX+"Error on writing on pipe " + writeDataPipeFile + ". Retrying " + retries + "/" + MAX_RETRIES);
+                LOGGER.warn(LOG_PREFIX + "Error on writing on pipe " + writeDataPipeFile + ". Retrying " + retries + "/" + MAX_RETRIES);
                 ++retries;
             }
         }
@@ -156,32 +156,33 @@ public class CThreadPool extends ExternalThreadPool {
             LOGGER.warn("ERROR: Data " + dataID + " has not been removed because cannot write in pipe");
         }
 
-       
     }
+
     @Override
     protected void specificStop() {
-    	if (NIOWorker.isPersistentCEnabled()) {
-    		LOGGER.debug(LOG_PREFIX+ " Sending Quit to data pipe");
-    		try (FileOutputStream output = new FileOutputStream(writeDataPipeFile, true);) {
-    			String quitCMD = ExternalExecutor.QUIT_TAG + ExternalExecutor.TOKEN_NEW_LINE;
-    			output.write(quitCMD.getBytes());
-    			output.flush();
-    			output.close();
-            
-    		} catch (Exception e) {
-    			ErrorManager.error(LOG_PREFIX+"Error on writing on pipe " + writeDataPipeFile, e );
-    		}
-    	}
-    	super.specificStop();
+        if (NIOWorker.isPersistentCEnabled()) {
+            LOGGER.debug(LOG_PREFIX + " Sending Quit to data pipe");
+            try (FileOutputStream output = new FileOutputStream(writeDataPipeFile, true);) {
+                String quitCMD = ExternalExecutor.QUIT_TAG + ExternalExecutor.TOKEN_NEW_LINE;
+                output.write(quitCMD.getBytes());
+                output.flush();
+                output.close();
+
+            } catch (Exception e) {
+                ErrorManager.error(LOG_PREFIX + "Error on writing on pipe " + writeDataPipeFile, e);
+            }
+        }
+        super.specificStop();
     }
+
     @Override
     public boolean serializeExternalData(String dataId, String path) {
         /*
-         * MANAGEMENT OF EXTERNAL DATA SERIALIZATION Send external data serialization request through data pipes. 
-         * The presistent worker will if the data is in the cache and then serialize it to the file in the path. 
-         * Return true if serialization was done, false otherwise
+         * MANAGEMENT OF EXTERNAL DATA SERIALIZATION Send external data serialization request through data pipes. The
+         * presistent worker will if the data is in the cache and then serialize it to the file in the path. Return true
+         * if serialization was done, false otherwise
          */
-        LOGGER.debug(LOG_PREFIX+"Request to serialize " +dataId + " at " + path);
+        LOGGER.debug(LOG_PREFIX + "Request to serialize " + dataId + " at " + path);
 
         String cmd = ExternalExecutor.SERIALIZE_TAG + ExternalExecutor.TOKEN_SEP + dataId + ExternalExecutor.TOKEN_SEP + path
                 + ExternalExecutor.TOKEN_NEW_LINE;
@@ -197,7 +198,7 @@ public class CThreadPool extends ExternalThreadPool {
                 output.close();
                 done = true;
             } catch (Exception e) {
-                LOGGER.warn(LOG_PREFIX+"Error on writing on pipe " + writeDataPipeFile + ". Retrying " + retries + "/" + MAX_RETRIES);
+                LOGGER.warn(LOG_PREFIX + "Error on writing on pipe " + writeDataPipeFile + ". Retrying " + retries + "/" + MAX_RETRIES);
                 ++retries;
             }
         }
@@ -205,13 +206,13 @@ public class CThreadPool extends ExternalThreadPool {
         // Wait for the result
         if (done) {
             try (FileInputStream input = new FileInputStream(readDataPipeFile);) {
-                LOGGER.debug(LOG_PREFIX+"Waiting for serialization results");
+                LOGGER.debug(LOG_PREFIX + "Waiting for serialization results");
                 input.read();
                 input.close();
                 done = true;
-                LOGGER.debug(LOG_PREFIX+"Data " +dataId + "serialized at " + path);
+                LOGGER.debug(LOG_PREFIX + "Data " + dataId + "serialized at " + path);
             } catch (Exception e) {
-                LOGGER.warn(LOG_PREFIX+"Error on writing on pipe " + writeDataPipeFile + ". Retrying " + retries + "/" + MAX_RETRIES);
+                LOGGER.warn(LOG_PREFIX + "Error on writing on pipe " + writeDataPipeFile + ". Retrying " + retries + "/" + MAX_RETRIES);
                 done = false;
             }
         }

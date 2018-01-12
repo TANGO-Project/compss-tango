@@ -101,6 +101,12 @@ get_args() {
             show_opts
             exit 0
             ;;
+	  debug)
+            debug=1
+	    ;;
+          instrument)
+            instrument=1
+            ;;
           ompss)
             ompss_enabled=1
             ;;
@@ -148,6 +154,8 @@ get_args() {
   fi
 }
 
+debug=0
+instrument=0
 get_args "$@"
 
 echo "*---------------------------------------------------------------------*"
@@ -165,6 +173,15 @@ echo "*  Dependencies: bash, csh                                            *"
 echo "*                                                                     *"
 echo "*---------------------------------------------------------------------*"
 echo ""
+
+if [ $debug -eq 1 ]; then
+   export CPPFLAGS="$CPPFLAGS -DDEBUG_BINDING"
+   ompss_flags="${ompss_flags} --debug"
+fi
+
+if [ $instrument -eq 1 ]; then
+  ompss_flags="${ompss_flags} --instrument"
+fi
 
 # Setting Java folder
 libjava=$(find ${JAVA_HOME}/jre/lib/ -name libjvm.so | head -n 1)

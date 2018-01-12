@@ -164,16 +164,28 @@ public abstract class Invoker {
     }
 
     public void serializeBinaryExitValue() throws JobExecutionException {
+        LOGGER.debug("Checking binary exit value serialization");
+
         NIOParam lastParam = nt.getParams().getLast();
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("- Param Type: " + lastParam.getType().name());
+            LOGGER.debug("- Preserve source data: " + lastParam.isPreserveSourceData());
+            LOGGER.debug("- Write final value: " + lastParam.isWriteFinalValue());
+            LOGGER.debug("- Prefix: " + lastParam.getPrefix());
+        }
+        
         // Last parameter is a FILE, direction OUT, with skip prefix => return in Python
         if (lastParam.getType().equals(DataType.FILE_T) && !lastParam.isPreserveSourceData() && lastParam.isWriteFinalValue()
                 && lastParam.getPrefix().equals(Constants.PREFIX_SKIP)) {
 
             // Write exit value to the file
-            String renaming = (String) lastParam.getValue();
+            String renaming = lastParam.getOriginalName();
+            LOGGER.info("Writing Binary Exit Value (" + this.retValue.toString() + ") to " + renaming);
+            
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(renaming))) {
                 String value = "I" + this.retValue.toString() + "\n.\n";
                 writer.write(value);
+                writer.flush();
             } catch (IOException ioe) {
                 throw new JobExecutionException("ERROR: Cannot serialize binary exit value for bindings", ioe);
             }

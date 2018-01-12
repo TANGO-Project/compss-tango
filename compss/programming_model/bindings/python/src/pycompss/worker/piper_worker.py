@@ -114,21 +114,43 @@ def worker(queue, process_name, input_pipe, output_pipe, storage_conf):
     logger.debug("[PYTHON WORKER] Starting process " + str(process_name))
     while alive:
         in_pipe = open(input_pipe, 'r', 0)
+        affinity_ok = True
         def process_task(line, pipe):
             line = line.split()
             pipe.close()
             if line[0] == EXECUTE_TASK_TAG:
                 # CPU binding
-                binded_cpus = line[-1]
-
+                binded_cpus = line[-3]
                 def bind_cpus(binded_cpus):
                     if binded_cpus != "-":
+                        os.environ['COMPSS_BINDED_CPUS'] = binded_cpus
+                        logger.debug("[PYTHON WORKER] Assigning affinity %s" % str(binded_cpus))
                         binded_cpus = map(int, binded_cpus.split(","))
-                        thread_affinity.setaffinity(binded_cpus)
-
+                        try:
+                            thread_affinity.setaffinity(binded_cpus)
+                        except:
+                            logger.error("[PYTHON WORKER] Warning: could not assign affinity %s" % str(binded_cpus))
+                            affinity_ok = False
                 bind_cpus(binded_cpus)
 
-                line = line[0:-1]
+                # GPU binding
+                binded_gpus = line[-2]
+                def bind_gpus(binded_gpus):
+                    if binded_gpus != "-":
+                        os.environ['COMPSS_BINDED_GPUS'] = binded_gpus
+                        os.environ['CUDA_VISIBLE_DEVICES'] = binded_gpus
+                        os.environ['GPU_DEVICE_ORDINAL'] = binded_gpus
+                bind_gpus(binded_gpus)
+
+                # Hostlist
+                hostlist = line[-1]
+                def treat_hostlist(hostlist):
+                    os.environ['COMPSS_HOSTNAMES'] = hostlist
+                treat_hostlist(hostlist)
+
+                # Remove the last elements: cpu and gpu bindings
+                line = line[0:-3]
+
                 # task jobId command
                 job_id = line[1]
                 job_out = line[2]
@@ -170,6 +192,8 @@ def worker(queue, process_name, input_pipe, output_pipe, storage_conf):
                     err = open(job_err, 'w')
                     sys.stdout = out
                     sys.stderr = err
+                    if not affinity_ok:
+                        err.write('WARNING: This task is going to be executed with default thread affinity %s'%thread_affinity.getaffinity())
                     exitvalue, newTypes, newValues = execute_task(process_name, storage_conf, line[9:])
                     sys.stdout = stdout
                     sys.stderr = stderr
@@ -213,6 +237,13 @@ def worker(queue, process_name, input_pipe, output_pipe, storage_conf):
                     logger.exception("[PYTHON WORKER %s] Exception %s" % (str(process_name), str(e)))
                     queue.put("EXCEPTION")
 
+                if binded_cpus != "-":
+                    del os.environ['COMPSS_BINDED_CPUS']
+                if binded_gpus != "-":
+                    del os.environ['COMPSS_BINDED_GPUS']
+                    del os.environ['CUDA_VISIBLE_DEVICES']
+                    del os.environ['GPU_DEVICE_ORDINAL']
+                del os.environ['COMPSS_HOSTNAMES']
                 # Restore logger
                 logger.removeHandler(out_file_handler)
                 logger.removeHandler(err_file_handler)
@@ -415,14 +446,18 @@ def execute_task(process_name, storage_conf, params):
 
         if has_target == 'true':
             # Instance method
-            file_name = values.pop().split(':')[-1]
-            logger.debug("[PYTHON WORKER %s] Deserialize self from file." % process_name)
-            obj = deserialize_from_file(file_name)
-
-            logger.debug("[PYTHON WORKER %s] Processing callee, a hidden object of %s in file %s" % (process_name, file_name, type(obj)))
+            last_elem = values.pop()
+            is_PSCO = not isinstance(last_elem, str)
+            if is_PSCO:
+                obj = last_elem
+            else:
+                file_name = last_elem.split(':')[-1]
+                logger.debug("[PYTHON WORKER %s] Deserialize self from file." % process_name)
+                obj = deserialize_from_file(file_name)
+                logger.debug("[PYTHON WORKER %s] Processing callee, a hidden object of %s in file %s" % (process_name, file_name, type(obj)))
             values.insert(0, obj)
             types.pop()
-            types.insert(0, TYPE.OBJECT)
+            types.insert(0, TYPE.OBJECT if not is_PSCO else TYPE.EXTERNAL_PSCO)
 
             def task_execution_2():
                 return task_execution(logger, process_name, klass, method_name, types, values, compss_kwargs)
@@ -435,7 +470,12 @@ def execute_task(process_name, storage_conf, params):
 
             logger.debug("[PYTHON WORKER %s] Serializing self to file." % process_name)
             logger.debug("[PYTHON WORKER %s] Obj: %r" % (process_name, obj))
-            serialize_to_file(obj, file_name)
+            if is_PSCO:
+                from storage.api import makePersistent, deletePersistent
+                deletePersistent(obj)
+                makePersistent(obj)
+            else:
+                serialize_to_file(obj, file_name)
         else:
             # Class method - class is not included in values (e.g. values = [7])
             types.insert(0, None)  # class must be first type
