@@ -15,6 +15,7 @@
  *
  */
 
+
 package es.bsc.compss.types.resources.test;
 
 import static org.junit.Assert.*;

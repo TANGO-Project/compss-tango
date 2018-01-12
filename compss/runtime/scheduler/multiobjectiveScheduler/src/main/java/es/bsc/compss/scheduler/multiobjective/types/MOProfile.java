@@ -15,6 +15,7 @@
  *
  */
 
+
 package es.bsc.compss.scheduler.multiobjective.types;
 
 import es.bsc.compss.scheduler.types.Profile;

@@ -15,6 +15,7 @@
  *
  */
 
+
 #ifndef GS_TEMPLATES_H
 #define GS_TEMPLATES_H
 

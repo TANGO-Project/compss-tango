@@ -15,6 +15,7 @@
  *
  */
 
+
 package es.bsc.compss.ws.master.configuration;
 
 import es.bsc.compss.types.resources.configuration.ServiceConfiguration;

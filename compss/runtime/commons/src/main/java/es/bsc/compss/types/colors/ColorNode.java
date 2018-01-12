@@ -15,6 +15,7 @@
  *
  */
 
+
 package es.bsc.compss.types.colors;
 
 public class ColorNode {

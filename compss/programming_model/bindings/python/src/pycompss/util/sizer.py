@@ -16,6 +16,7 @@
 
 
 
+
 """
 Utils - Object sizing algorithm
 ===============================

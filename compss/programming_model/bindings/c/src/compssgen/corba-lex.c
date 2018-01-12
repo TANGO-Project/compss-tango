@@ -16,6 +16,7 @@
  */
 
 
+
 #line 3 "corba-lex.c"
 
 #define  YY_INT_ALIGNED short int

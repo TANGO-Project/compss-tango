@@ -15,6 +15,7 @@
  *
  */
 
+
 package es.bsc.compss.nio.exceptions;
 
 public class SerializedObjectException extends Exception {

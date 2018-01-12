@@ -15,6 +15,7 @@
  *
  */
 
+
 package es.bsc.compss.exceptions;
 
 public class NonInstantiableException extends RuntimeException {

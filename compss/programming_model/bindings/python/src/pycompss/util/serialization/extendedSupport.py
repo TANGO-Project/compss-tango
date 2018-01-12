@@ -17,6 +17,7 @@
 
 
 
+
 def pickle_generator(f_gen, f, serializer):
     '''
     Pickle a generator and store the serialization result in a file.

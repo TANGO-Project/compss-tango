@@ -15,6 +15,7 @@
  *
  */
 
+
 #include "thread_affinity.h"
 
 static PyObject* pysched_setaffinity(PyObject* self, PyObject* args) {

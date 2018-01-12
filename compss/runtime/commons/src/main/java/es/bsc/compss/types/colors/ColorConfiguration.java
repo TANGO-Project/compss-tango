@@ -15,6 +15,7 @@
  *
  */
 
+
 package es.bsc.compss.types.colors;
 
 import es.bsc.compss.types.exceptions.NonInstantiableException;

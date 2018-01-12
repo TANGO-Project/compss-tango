@@ -15,6 +15,7 @@
  *
  */
 
+
 package es.bsc.compss.types.resources.configuration;
 
 public class ServiceConfiguration extends Configuration {

@@ -15,6 +15,7 @@
  *
  */
 
+
 package es.bsc.compss.nio.worker.exceptions;
 
 public class UnsufficientAvailableGPUsException extends UnsufficientAvailableComputingUnitsException {

@@ -16,6 +16,7 @@
  */
 
 
+
 /*
   Wrappers that make possible to call thread (set|get)affinity from Python2
 

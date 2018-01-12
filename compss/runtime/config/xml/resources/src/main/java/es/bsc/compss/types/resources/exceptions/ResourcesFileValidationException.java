@@ -15,6 +15,7 @@
  *
  */
 
+
 package es.bsc.compss.types.resources.exceptions;
 
 public class ResourcesFileValidationException extends Exception {
